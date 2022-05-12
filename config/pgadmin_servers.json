@@ -1,0 +1,14 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "OSM2VDV462_DB",
+            "Group": "Servers",
+            "Port": 5432,
+            "Username": "admin",
+            "Host": "osm2vdv462_postgis",
+            "SSLMode": "prefer",
+            "MaintenanceDB": "postgres"
+        }
+    }
+}
+
