@@ -48,7 +48,7 @@ tables.public_transport = osm2pgsql.define_table({
 })
 
 -- Create table that contains all ways and connections
--- TODO: Investigate highways with type node like crossing (https://wiki.openstreetmap.org/wiki/DE%3ATag%3Ahighway%3Dcrossing)
+-- TODO: Investigate highways of type node with value elevator or crossing (https://wiki.openstreetmap.org/wiki/DE%3ATag%3Ahighway%3Dcrossing)
 -- See all highway values for nodes: https://taginfo.openstreetmap.org/keys/?key=highway&filter=nodes#values
 tables.paths = osm2pgsql.define_way_table("paths", {
     { column = 'tags', type = 'jsonb' },
