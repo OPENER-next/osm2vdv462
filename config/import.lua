@@ -1,12 +1,30 @@
 -- Define the table columns
 -- The column names should be equal to the OSM tag/key they are supposed to store, because we reuse this table later
 
-local public_transport_columns = {
+local public_transport_areas_columns = {
     { column = 'name', type = 'text' },
     { column = 'ref', type = 'text' },
-    { column = 'public_transport', type = 'text' },
     { column = 'ref:IFOPT', type = 'text' },
     { column = 'operator', type = 'text' },
+    { column = 'train', type = 'text' },
+    { column = 'light_rail', type = 'text' },
+    { column = 'subway', type = 'text' },
+    { column = 'tram', type = 'text' },
+    { column = 'coach', type = 'text' },
+    { column = 'bus', type = 'text' }
+}
+
+local public_transport_stops_columns = {
+    { column = 'name', type = 'text' },
+    { column = 'ref', type = 'text' },
+    { column = 'ref:IFOPT', type = 'text' },
+    { column = 'operator', type = 'text' },
+    { column = 'train', type = 'text' },
+    { column = 'light_rail', type = 'text' },
+    { column = 'subway', type = 'text' },
+    { column = 'tram', type = 'text' },
+    { column = 'coach', type = 'text' },
+    { column = 'bus', type = 'text' }
 }
 
 local paths_columns = {
@@ -31,9 +49,23 @@ local places_of_interest_columns = {
 -- Create tables and store references
 local tables = {}
 
+
+-- Create table that contains all public_transport area relations
+tables.public_transport_area = osm2pgsql.define_relation_table("public_transport_areas", {
+    { column = 'tags', type = 'jsonb' },
+    -- note: unpack needs to be put at the end in order to work correctly
+    table.unpack(public_transport_areas_columns)
+})
+
+-- Create table that contains the mapping of the public_transport area to its members
+tables.public_transport_areas_members_ref = osm2pgsql.define_relation_table("public_transport_areas_members_ref", {
+    { column = 'member_id', type = 'BIGINT' },
+    { column = 'osm_type', type = 'text', sql_type = 'CHAR(1)' },
+})
+
 -- Create table that contains all public_transport relevant elements
-tables.public_transport = osm2pgsql.define_table({
-    name = "public_transport",
+tables.public_transport_stops = osm2pgsql.define_table({
+    name = "public_transport_stops",
     ids = {
         type = 'any',
         id_column = 'osm_id',
@@ -43,7 +75,7 @@ tables.public_transport = osm2pgsql.define_table({
         { column = 'tags', type = 'jsonb' },
         { column = 'geom', type = 'geometry' },
         -- note: unpack needs to be put at the end in order to work correctly
-        table.unpack(public_transport_columns)
+        table.unpack(public_transport_stops_columns)
     }
 })
 
@@ -75,14 +107,30 @@ tables.places_of_interest = osm2pgsql.define_table({
 
 -- Process and add osm elements to tables
 
-function extract_public_transport(object, osm_type)
-    local is_public_transport = object.tags.public_transport ~= nil
-    if is_public_transport then
-        local row = build_row(object, public_transport_columns, osm_type)
-        row.geom = { create = 'point' }
-        tables.public_transport:add_row(row)
+function extract_public_transport_areas(object)
+    local is_area = object.tags.public_transport == 'stop_area'
+    if is_area then
+        local row = build_row(object, public_transport_areas_columns)
+        tables.public_transport_area:add_row(row)
+
+        -- Go through all members and store them in a separate reference table
+        for _, member in ipairs(object.members) do
+            tables.public_transport_areas_members_ref:add_row({
+                member_id = member.ref,
+                osm_type = member.type:upper()
+            })
+        end
     end
-    return is_public_transport
+    return is_area
+end
+
+function extract_public_transport_stops(object, osm_type)
+    local is_stop = object.tags.public_transport == 'platform'
+    if is_stop then
+        local row = build_row(object, public_transport_stops_columns, osm_type)
+        tables.public_transport_stops:add_row(row)
+    end
+    return is_stop
 end
 
 function extract_paths(object)
@@ -107,18 +155,18 @@ end
 -- Fill previously created tables
 
 function osm2pgsql.process_node(object)
-    if extract_public_transport(object, 'node') then return end
+    if extract_public_transport_stops(object, 'node') then return end
     extract_places_of_interest(object, 'node')
 end
 
 function osm2pgsql.process_way(object)
-    if extract_public_transport(object, 'way') then return end
+    if extract_public_transport_stops(object, 'way') then return end
     if extract_paths(object) then return end
     extract_places_of_interest(object, 'way')
 end
 
 function osm2pgsql.process_relation(object)
-    if extract_public_transport(object, 'relation') then return end
+    if extract_public_transport_areas(object) then return end
     extract_places_of_interest(object, 'relation')
 end
 
