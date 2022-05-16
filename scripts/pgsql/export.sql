@@ -14,7 +14,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 -- Create a single key value pair element
--- Returns null when any argument is nul^
+-- Returns null when any argument is null
 
 CREATE OR REPLACE FUNCTION create_key_value_xml(a anyelement, b anyelement) RETURNS xml AS
 $$
@@ -43,6 +43,37 @@ $$
 LANGUAGE SQL IMMUTABLE;
 
 
+-- Create an AlternativeName element based on name:LANG_CODE tags
+-- Returns null when no tag matching exists
+
+CREATE OR REPLACE FUNCTION extract_alternative_names_xml(tags jsonb) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+	IF tags->'name:en' IS NOT NULL THEN
+    result := xmlconcat(result, xmlelement(name "AlternativeName",
+      xmlelement(name "Lang", 'en'),
+      xmlelement(name "Name", tags->'name:en')
+    ));
+	END IF;
+	IF tags->'name:de' IS NOT NULL THEN
+    result := xmlconcat(result, xmlelement(name "AlternativeName",
+      xmlelement(name "Lang", 'de'),
+      xmlelement(name "Name", tags->'name:de')
+    ));
+	END IF;
+	IF tags->'name:fr' IS NOT NULL THEN
+    result := xmlconcat(result, xmlelement(name "AlternativeName",
+      xmlelement(name "Lang", 'fr'),
+      xmlelement(name "Name", tags->'name:fr')
+    ));
+	END IF;
+  RETURN result;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
 
 -- Build final export data table
 -- Join all stops to their stop areas
@@ -53,7 +84,7 @@ SELECT
   ptr.relation_id,
   pta.name AS area_name, pta."ref:IFOPT" AS area_dhid,
   row_to_stop_place_type(pta) AS area_type,
-  pts.name AS stop_name, pts."ref:IFOPT" AS stop_dhid, pts.geom AS stop_geom
+  pts.name AS stop_name, pts."ref:IFOPT" AS stop_dhid, pts.tags AS stop_tags, pts.geom AS stop_geom
 FROM public_transport_areas_members_ref ptr
 INNER JOIN public_transport_areas pta
   ON pta.relation_id = ptr.relation_id
@@ -65,36 +96,40 @@ INNER JOIN public_transport_stops pts
 
 SELECT
 -- <StopPlace>
-xmlelement(name "StopPlace", xmlattributes(gs.area_dhid as id),
+xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   -- <Name>
-	xmlelement(name "Name", gs.area_name),
+	xmlelement(name "Name", ex.area_name),
   -- <Centroid>
 	geom_to_centroid_xml(NULL),
   -- <StopPlaceType>
-  xmlelement(name "StopPlaceType", gs.area_type),
+  xmlelement(name "StopPlaceType", ex.area_type),
   -- <keyList>
   xmlelement(name "keyList", xmlconcat(
-    create_key_value_xml('GlobalID', gs.area_dhid)
+    create_key_value_xml('GlobalID', ex.area_dhid)
   )),
   -- <quays>
   xmlelement(name "quays", (
     xmlagg(
       -- <Quay>
-      xmlelement(name "Quay", gs.stop_dhid,
+      xmlelement(name "Quay", ex.stop_dhid,
         -- <Name>
-        xmlelement(name "Name", gs.stop_name),
+        xmlelement(name "Name", ex.stop_name),
         -- <Centroid>
-        geom_to_centroid_xml(gs.stop_geom),
+        geom_to_centroid_xml(ex.stop_geom),
+        -- <AlternativeName>
+        extract_alternative_names_xml(ex.stop_tags),
         -- <keyList>
         xmlelement(name "keyList", xmlconcat(
-          create_key_value_xml('GlobalID', gs.stop_dhid)
+          create_key_value_xml('GlobalID', ex.stop_dhid)
         ))
       )
     )
   ))
 )
-FROM export_data gs
--- area_dhid and area_name will be identical for the same relation_id since they are just duplicates from prvious joins
-GROUP BY gs.relation_id, gs.area_dhid, gs.area_name, gs.area_type
+FROM export_data ex
+-- area_dhid and area_name will be identical for the same relation_id since they are just duplicates from previous joins
+GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_type
+
+
 
 
