@@ -63,7 +63,7 @@ if [ -f "$IMPORT_FILE" ]; then
     --drop \
     --cache 2048 \
     --output flex \
-    --style "$(pwd)/config/import.lua" \
+    --style "$(pwd)/scripts/osm2pgsql/main.lua" \
     $IMPORT_FILE
 fi
 
