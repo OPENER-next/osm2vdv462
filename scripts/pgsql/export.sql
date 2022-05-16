@@ -26,9 +26,9 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
--- returns a StopPlaceType value based on the columns/tags train, subway, coach and bus
--- unused types: "airport" | "harbourPort" | "ferrytPort" | "ferryStop" | "onStreetBus" | "onStreetTram" | "skiLift"
--- from: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
+-- Returns a StopPlaceType value based on the columns/tags train, subway, coach and bus
+-- Unused types: "airport" | "harbourPort" | "ferrytPort" | "ferryStop" | "onStreetBus" | "onStreetTram" | "skiLift"
+-- From: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
 
 CREATE OR REPLACE FUNCTION row_to_stop_place_type(p_row public_transport_areas) RETURNS text AS
 $$
@@ -43,6 +43,19 @@ $$
 LANGUAGE SQL IMMUTABLE;
 
 
+-- Create a single Lang Name pair element
+-- Returns null when any argument is null
+
+CREATE OR REPLACE FUNCTION create_alternative_name_pair_xml(a text, b text) RETURNS xml AS
+$$
+SELECT xmlelement(name "AlternativeName",
+  xmlelement(name "Lang", $1),
+  xmlelement(name "Name", $2)
+)
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
 -- Create an AlternativeName element based on name:LANG_CODE tags
 -- Returns null when no tag matching exists
 
@@ -51,25 +64,23 @@ $$
 DECLARE
   result xml;
 BEGIN
-	IF tags->'name:en' IS NOT NULL THEN
-    result := xmlconcat(result, xmlelement(name "AlternativeName",
-      xmlelement(name "Lang", 'en'),
-      xmlelement(name "Name", tags->'name:en')
-    ));
-	END IF;
-	IF tags->'name:de' IS NOT NULL THEN
-    result := xmlconcat(result, xmlelement(name "AlternativeName",
-      xmlelement(name "Lang", 'de'),
-      xmlelement(name "Name", tags->'name:de')
-    ));
-	END IF;
-	IF tags->'name:fr' IS NOT NULL THEN
-    result := xmlconcat(result, xmlelement(name "AlternativeName",
-      xmlelement(name "Lang", 'fr'),
-      xmlelement(name "Name", tags->'name:fr')
-    ));
-	END IF;
-  RETURN result;
+  result := xmlconcat(
+    create_alternative_name_pair_xml(
+      'en', tags->>'name:en'
+    ),
+    create_alternative_name_pair_xml(
+      'de', tags->>'name:de'
+    ),
+    create_alternative_name_pair_xml(
+      'fr', tags->>'name:fr'
+    )
+  );
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "alternativeNames", result);
+  END IF;
+
+  RETURN NULL;
 END
 $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
