@@ -5,10 +5,10 @@
 CREATE OR REPLACE FUNCTION geom_to_centroid_xml(a geometry) RETURNS xml AS
 $$
 SELECT xmlelement(name "Centroid",
-	xmlelement(name "Location",
-		xmlelement(name "Longitude", ST_X(ST_Transform(ST_Centroid($1), 4326))),
-		xmlelement(name "Latitude", ST_Y(ST_Transform(ST_Centroid($1), 4326)))
-	)
+  xmlelement(name "Location",
+    xmlelement(name "Longitude", ST_X(ST_Transform(ST_Centroid($1), 4326))),
+    xmlelement(name "Latitude", ST_Y(ST_Transform(ST_Centroid($1), 4326)))
+  )
 )
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
@@ -204,9 +204,9 @@ SELECT
 -- <StopPlace>
 xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   -- <Name>
-	xmlelement(name "Name", ex.area_name),
+  xmlelement(name "Name", ex.area_name),
   -- <Centroid>
-	geom_to_centroid_xml(NULL),
+  geom_to_centroid_xml(area_geom),
   -- <StopPlaceType>
   extract_stop_place_type_xml(ex.area_tags),
   -- <AlternativeName>
@@ -252,7 +252,8 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
 )
 FROM export_data ex
 -- area_dhid and area_name will be identical for the same relation_id since they are just duplicates from previous joins
-GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags
+GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom
+
 
 
 
