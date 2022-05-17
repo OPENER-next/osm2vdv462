@@ -29,6 +29,50 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
+ * Create a single key value pair element where value is empty if the given tag value equals "yes"
+ * Else returns null
+ */
+CREATE OR REPLACE FUNCTION delfi_attribute_on_yes_xml(delfiid text, val text) RETURNS xml AS
+$$
+SELECT CASE
+  WHEN $2 = 'yes' THEN create_key_value_xml($1, '')
+END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a keyList element based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION extract_key_list_xml(tags jsonb, additionalPairs xml) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+  result := xmlconcat(
+    additionalPairs,
+    delfi_attribute_on_yes_xml(
+      '1120', tags->>'bench'
+    ),
+    delfi_attribute_on_yes_xml(
+      '1140', tags->>'passenger_information_display'
+    ),
+    delfi_attribute_on_yes_xml(
+      '1141', tags->>'passenger_information_display:speech_output'
+    )
+  );
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "keyList", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
 
 /*
  * Create a StopPlaceType element based on the tags: train, subway, coach and bus
@@ -150,10 +194,13 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
 	geom_to_centroid_xml(NULL),
   -- <StopPlaceType>
   extract_stop_place_type_xml(ex.area_tags),
+  -- <AlternativeName>
+  extract_alternative_names_xml(ex.area_tags),
   -- <keyList>
-  xmlelement(name "keyList", xmlconcat(
+  extract_key_list_xml(
+    ex.area_tags,
     create_key_value_xml('GlobalID', ex.area_dhid)
-  )),
+  ),
   CASE
     -- <quays>
     WHEN TRUE THEN xmlelement(name "quays", (
@@ -167,9 +214,10 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
           -- <AlternativeName>
           extract_alternative_names_xml(ex.stop_tags),
           -- <keyList>
-          xmlelement(name "keyList", xmlconcat(
+          extract_key_list_xml(
+            ex.stop_tags,
             create_key_value_xml('GlobalID', ex.stop_dhid)
-          )),
+          )
         )
       )
     ))
