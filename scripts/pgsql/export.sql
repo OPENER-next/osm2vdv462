@@ -55,7 +55,7 @@ LANGUAGE SQL IMMUTABLE;
  * Create a single Lang Name pair element
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_alternative_name_pair_xml(a text, b text) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_alternative_name_xml(a text, b text) RETURNS xml AS
 $$
 SELECT xmlelement(name "AlternativeName",
   xmlelement(name "Lang", $1),
@@ -129,11 +129,11 @@ CREATE OR REPLACE VIEW public_transport_areas_with_geom AS (
 
 CREATE TEMP TABLE export_data AS
 SELECT
-  pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid,
-  row_to_stop_place_type(pta) AS area_type,
+  pta.relation_id,
+  pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
   pts.name AS stop_name, pts."ref:IFOPT" AS stop_dhid, pts.tags AS stop_tags, pts.geom AS stop_geom
 FROM public_transport_areas_members_ref ptr
-INNER JOIN public_transport_areas pta
+INNER JOIN public_transport_areas_with_geom pta
   ON pta.relation_id = ptr.relation_id
 INNER JOIN public_transport_stops pts
   ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type;
@@ -154,28 +154,43 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   xmlelement(name "keyList", xmlconcat(
     create_key_value_xml('GlobalID', ex.area_dhid)
   )),
-  -- <quays>
-  xmlelement(name "quays", (
-    xmlagg(
-      -- <Quay>
-      xmlelement(name "Quay", ex.stop_dhid,
-        -- <Name>
-        xmlelement(name "Name", ex.stop_name),
-        -- <Centroid>
-        geom_to_centroid_xml(ex.stop_geom),
-        -- <AlternativeName>
-        extract_alternative_names_xml(ex.stop_tags),
-        -- <keyList>
-        xmlelement(name "keyList", xmlconcat(
-          create_key_value_xml('GlobalID', ex.stop_dhid)
-        ))
+  CASE
+    -- <quays>
+    WHEN TRUE THEN xmlelement(name "quays", (
+      xmlagg(
+        -- <Quay>
+        xmlelement(name "Quay", ex.stop_dhid,
+          -- <Name>
+          xmlelement(name "Name", ex.stop_name),
+          -- <Centroid>
+          geom_to_centroid_xml(ex.stop_geom),
+          -- <AlternativeName>
+          extract_alternative_names_xml(ex.stop_tags),
+          -- <keyList>
+          xmlelement(name "keyList", xmlconcat(
+            create_key_value_xml('GlobalID', ex.stop_dhid)
+          )),
+        )
       )
-    )
-  ))
+    ))
+    WHEN FALSE THEN xmlelement(name "accessSpaces", (
+      xmlagg(
+        -- ....
+        xmlelement(name "Dummy")
+      )
+    ))
+    WHEN FALSE THEN xmlelement(name "pathLinks", (
+      xmlagg(
+        -- ....
+        xmlelement(name "Dummy")
+      )
+    ))
+  END
 )
 FROM export_data ex
 -- area_dhid and area_name will be identical for the same relation_id since they are just duplicates from previous joins
-GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_type
+GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags
+
 
 
 
