@@ -53,15 +53,9 @@ DECLARE
 BEGIN
   result := xmlconcat(
     additionalPairs,
-    delfi_attribute_on_yes_xml(
-      '1120', tags->>'bench'
-    ),
-    delfi_attribute_on_yes_xml(
-      '1140', tags->>'passenger_information_display'
-    ),
-    delfi_attribute_on_yes_xml(
-      '1141', tags->>'passenger_information_display:speech_output'
-    )
+    delfi_attribute_on_yes_xml('1120', tags->>'bench'),
+    delfi_attribute_on_yes_xml('1140', tags->>'passenger_information_display'),
+    delfi_attribute_on_yes_xml('1141', tags->>'passenger_information_display:speech_output')
   );
 
   IF result IS NOT NULL THEN
@@ -119,30 +113,14 @@ DECLARE
   result xml;
 BEGIN
   result := xmlconcat(
-    create_alternative_name_xml(
-      'en', tags->>'name:en'
-    ),
-    create_alternative_name_xml(
-      'de', tags->>'name:de'
-    ),
-    create_alternative_name_xml(
-      'fr', tags->>'name:fr'
-    ),
-    create_alternative_name_xml(
-      'cs', tags->>'name:cs'
-    ),
-    create_alternative_name_xml(
-      'pl', tags->>'name:pl'
-    ),
-    create_alternative_name_xml(
-      'da', tags->>'name:da'
-    ),
-    create_alternative_name_xml(
-      'nl', tags->>'name:nl'
-    ),
-    create_alternative_name_xml(
-      'lb', tags->>'name:lb'
-    )
+    create_alternative_name_xml('en', tags->>'name:en'),
+    create_alternative_name_xml('de', tags->>'name:de'),
+    create_alternative_name_xml('fr', tags->>'name:fr'),
+    create_alternative_name_xml('cs', tags->>'name:cs'),
+    create_alternative_name_xml('pl', tags->>'name:pl'),
+    create_alternative_name_xml('da', tags->>'name:da'),
+    create_alternative_name_xml('nl', tags->>'name:nl'),
+    create_alternative_name_xml('lb', tags->>'name:lb')
   );
 
   IF result IS NOT NULL THEN
