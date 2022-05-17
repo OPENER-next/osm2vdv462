@@ -29,19 +29,24 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Returns a StopPlaceType value based on the columns/tags train, subway, coach and bus
+
+/*
+ * Create a StopPlaceType element based on the tags: train, subway, coach and bus
  * Unused types: "airport" | "harbourPort" | "ferrytPort" | "ferryStop" | "onStreetBus" | "onStreetTram" | "skiLift"
  * From: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
+ * If no match is found this will always return a StopPlaceType of "other"
  */
-CREATE OR REPLACE FUNCTION row_to_stop_place_type(p_row public_transport_areas) RETURNS text AS
+CREATE OR REPLACE FUNCTION extract_stop_place_type_xml(tags jsonb) RETURNS xml AS
 $$
-SELECT CASE
-  WHEN $1.train = 'yes' THEN 'railStation'
-  WHEN $1.subway = 'yes' THEN 'metroStation'
-  WHEN $1.coach = 'yes' THEN 'coachStation'
-  WHEN $1.bus = 'yes' THEN 'busStation'
-  ELSE 'other'
-END
+SELECT xmlelement(name "StopPlaceType",
+  CASE
+    WHEN $1->>'train' = 'yes' THEN 'railStation'
+    WHEN $1->>'subway' = 'yes' THEN 'metroStation'
+    WHEN $1->>'coach' = 'yes' THEN 'coachStation'
+    WHEN $1->>'bus' = 'yes' THEN 'busStation'
+    ELSE 'other'
+  END
+)
 $$
 LANGUAGE SQL IMMUTABLE;
 
@@ -144,7 +149,7 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   -- <Centroid>
 	geom_to_centroid_xml(NULL),
   -- <StopPlaceType>
-  xmlelement(name "StopPlaceType", ex.area_type),
+  extract_stop_place_type_xml(ex.area_tags),
   -- <keyList>
   xmlelement(name "keyList", xmlconcat(
     create_key_value_xml('GlobalID', ex.area_dhid)

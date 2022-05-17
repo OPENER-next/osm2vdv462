@@ -7,26 +7,14 @@ local public_transport_areas_columns = {
     { column = 'name', type = 'text' },
     { column = 'ref', type = 'text' },
     { column = 'ref:IFOPT', type = 'text' },
-    { column = 'operator', type = 'text' },
-    { column = 'train', type = 'text' },
-    { column = 'light_rail', type = 'text' },
-    { column = 'subway', type = 'text' },
-    { column = 'tram', type = 'text' },
-    { column = 'coach', type = 'text' },
-    { column = 'bus', type = 'text' }
+    { column = 'operator', type = 'text' }
 }
 
 local public_transport_stops_columns = {
     { column = 'name', type = 'text' },
     { column = 'ref', type = 'text' },
     { column = 'ref:IFOPT', type = 'text' },
-    { column = 'operator', type = 'text' },
-    { column = 'train', type = 'text' },
-    { column = 'light_rail', type = 'text' },
-    { column = 'subway', type = 'text' },
-    { column = 'tram', type = 'text' },
-    { column = 'coach', type = 'text' },
-    { column = 'bus', type = 'text' }
+    { column = 'operator', type = 'text' }
 }
 
 
