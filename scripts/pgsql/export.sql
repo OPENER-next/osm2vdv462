@@ -1,6 +1,7 @@
--- Create a centroid element from any geometry
--- Returns null when any argument is null
-
+/*
+ * Create a centroid element from any geometry
+ * Returns null when any argument is null
+ */
 CREATE OR REPLACE FUNCTION geom_to_centroid_xml(a geometry) RETURNS xml AS
 $$
 SELECT xmlelement(name "Centroid",
@@ -13,9 +14,10 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
--- Create a single key value pair element
--- Returns null when any argument is null
-
+/*
+ * Create a single key value pair element
+ * Returns null when any argument is null
+ */
 CREATE OR REPLACE FUNCTION create_key_value_xml(a anyelement, b anyelement) RETURNS xml AS
 $$
 SELECT xmlelement(name "KeyValue",
@@ -26,10 +28,11 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
--- Returns a StopPlaceType value based on the columns/tags train, subway, coach and bus
--- Unused types: "airport" | "harbourPort" | "ferrytPort" | "ferryStop" | "onStreetBus" | "onStreetTram" | "skiLift"
--- From: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
-
+/*
+ * Returns a StopPlaceType value based on the columns/tags train, subway, coach and bus
+ * Unused types: "airport" | "harbourPort" | "ferrytPort" | "ferryStop" | "onStreetBus" | "onStreetTram" | "skiLift"
+ * From: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
+ */
 CREATE OR REPLACE FUNCTION row_to_stop_place_type(p_row public_transport_areas) RETURNS text AS
 $$
 SELECT CASE
@@ -43,9 +46,10 @@ $$
 LANGUAGE SQL IMMUTABLE;
 
 
--- Create a single Lang Name pair element
--- Returns null when any argument is null
-
+/*
+ * Create a single Lang Name pair element
+ * Returns null when any argument is null
+ */
 CREATE OR REPLACE FUNCTION create_alternative_name_pair_xml(a text, b text) RETURNS xml AS
 $$
 SELECT xmlelement(name "AlternativeName",
@@ -56,9 +60,10 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
--- Create an AlternativeName element based on name:LANG_CODE tags
--- Returns null when no tag matching exists
-
+/*
+ * Create an AlternativeName element based on name:LANG_CODE tags
+ * Returns null when no tag matching exists
+ */
 CREATE OR REPLACE FUNCTION extract_alternative_names_xml(tags jsonb) RETURNS xml AS
 $$
 DECLARE
