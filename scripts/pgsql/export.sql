@@ -91,14 +91,40 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/*
+ * Create view that contains all stop areas with a geometry column derived from their members
+ *
+ * Aggregate member stop geometries to stop areas
+ * Split JOINs because GROUP BY doesn't allow grouping by all columns of a specific table
+ */
+CREATE OR REPLACE VIEW public_transport_areas_with_geom AS (
+  WITH
+    stops_mapped_to_relation_id AS (
+      SELECT *
+      FROM public_transport_areas_members_ref ptr
+      INNER JOIN public_transport_stops pts
+        ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
+    ),
+    stops_clustered_by_relation_id AS (
+      SELECT sm.relation_id, ST_Collect(geom) AS geom
+      FROM stops_mapped_to_relation_id sm
+      GROUP BY sm.relation_id
+    )
+  SELECT pta.*, geom
+  FROM public_transport_areas pta
+  INNER JOIN stops_clustered_by_relation_id sc
+    ON pta.relation_id = sc.relation_id
+);
+
+
+
 -- Build final export data table
 -- Join all stops to their stop areas
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
 
 CREATE TEMP TABLE export_data AS
 SELECT
-  ptr.relation_id,
-  pta.name AS area_name, pta."ref:IFOPT" AS area_dhid,
+  pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid,
   row_to_stop_place_type(pta) AS area_type,
   pts.name AS stop_name, pts."ref:IFOPT" AS stop_dhid, pts.tags AS stop_tags, pts.geom AS stop_geom
 FROM public_transport_areas_members_ref ptr
