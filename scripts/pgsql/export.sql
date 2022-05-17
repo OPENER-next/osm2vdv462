@@ -119,14 +119,29 @@ DECLARE
   result xml;
 BEGIN
   result := xmlconcat(
-    create_alternative_name_pair_xml(
+    create_alternative_name_xml(
       'en', tags->>'name:en'
     ),
-    create_alternative_name_pair_xml(
+    create_alternative_name_xml(
       'de', tags->>'name:de'
     ),
-    create_alternative_name_pair_xml(
+    create_alternative_name_xml(
       'fr', tags->>'name:fr'
+    ),
+    create_alternative_name_xml(
+      'cs', tags->>'name:cs'
+    ),
+    create_alternative_name_xml(
+      'pl', tags->>'name:pl'
+    ),
+    create_alternative_name_xml(
+      'da', tags->>'name:da'
+    ),
+    create_alternative_name_xml(
+      'nl', tags->>'name:nl'
+    ),
+    create_alternative_name_xml(
+      'lb', tags->>'name:lb'
     )
   );
 
