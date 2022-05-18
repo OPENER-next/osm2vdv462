@@ -141,16 +141,12 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  */
 CREATE OR REPLACE VIEW public_transport_areas_with_geom AS (
   WITH
-    stops_mapped_to_relation_id AS (
-      SELECT *
+    stops_clustered_by_relation_id AS (
+      SELECT ptr.relation_id, ST_Collect(geom) AS geom
       FROM public_transport_areas_members_ref ptr
       INNER JOIN public_transport_stops pts
         ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
-    ),
-    stops_clustered_by_relation_id AS (
-      SELECT sm.relation_id, ST_Collect(geom) AS geom
-      FROM stops_mapped_to_relation_id sm
-      GROUP BY sm.relation_id
+      GROUP BY ptr.relation_id
     )
   SELECT pta.*, geom
   FROM public_transport_areas pta
