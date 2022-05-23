@@ -134,6 +134,42 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*
+ * Create an ShortName element based on short_name tag
+ * Returns null otherwise
+ */
+CREATE OR REPLACE FUNCTION extract_short_name_xml(tags jsonb) RETURNS xml AS
+$$
+SELECT
+  CASE
+    WHEN $1->>'short_name' IS NOT NULL THEN xmlelement(
+      name "ShortName",
+      $1->>'short_name'
+    )
+    ELSE NULL
+  END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a Description element based on description tag
+ * Returns null otherwise
+ */
+CREATE OR REPLACE FUNCTION extract_description_xml(tags jsonb) RETURNS xml AS
+$$
+SELECT
+  CASE
+    WHEN $1->>'description' IS NOT NULL THEN xmlelement(
+      name "Description",
+      $1->>'description'
+    )
+    ELSE NULL
+  END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
  * Create view that contains all stop areas with a geometry column derived from their members
  *
  * Aggregate member stop geometries to stop areas
@@ -179,12 +215,16 @@ SELECT
 xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   -- <Name>
   xmlelement(name "Name", ex.area_name),
-  -- <Centroid>
-  geom_to_centroid_xml(area_geom),
-  -- <StopPlaceType>
-  extract_stop_place_type_xml(ex.area_tags),
+  -- <ShortName>
+  extract_short_name_xml(ex.area_tags),
   -- <AlternativeName>
   extract_alternative_names_xml(ex.area_tags),
+  -- <Description>
+  extract_description_xml(ex.area_tags),
+  -- <StopPlaceType>
+  extract_stop_place_type_xml(ex.area_tags),
+  -- <Centroid>
+  geom_to_centroid_xml(area_geom),
   -- <keyList>
   extract_key_list_xml(
     ex.area_tags,
@@ -198,10 +238,12 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
         xmlelement(name "Quay", ex.stop_dhid,
           -- <Name>
           xmlelement(name "Name", ex.stop_name),
-          -- <Centroid>
-          geom_to_centroid_xml(ex.stop_geom),
+          -- <ShortName>
+          extract_short_name_xml(ex.area_tags),
           -- <AlternativeName>
           extract_alternative_names_xml(ex.stop_tags),
+          -- <Centroid>
+          geom_to_centroid_xml(ex.stop_geom),
           -- <keyList>
           extract_key_list_xml(
             ex.stop_tags,
