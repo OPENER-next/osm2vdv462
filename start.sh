@@ -10,19 +10,23 @@ PG_ADMIN_PASSWORD="admin"
 
 DOCKER_NETWORK="osm2vdv462_net"
 
+EXPORT_FILE="export.xml"
 
+
+echo -n  "Setup docker network for postgis database: "
 # Create a network to use the Postgis-Server in another container.
 # Networks are used to connect containers and allow them to communicate.
 # If it fails (for example because it already exists) ignore the error.
 docker network create $DOCKER_NETWORK || true
 
 
+echo -n  "Setup docker volume for postgis database: "
 # Create docker volume which is a storage point located outside of containers.
 # This is required to persistently store the database between docker restarts.
 docker volume create osm2vdv462_postgis
 
 
-echo "Starting postgis db docker"
+echo -n  "Starting postgis database docker: "
 # Start postgis docker if already existing and not running
 # Otherwise install and run it
 docker start osm2vdv462_postgis || docker run \
@@ -41,7 +45,7 @@ docker start osm2vdv462_postgis || docker run \
 
 read -p "Do you want to use pgadmin4? (y/n) " USE_PGADMIN4
 # Optionally install and run pgadmin for easier database management
-if [ $USE_PGADMIN4 = "y" ] || [ $USE_PGADMIN4 = "Y" ]; then
+if [ "$USE_PGADMIN4" = "y" ] || [ "$USE_PGADMIN4" = "Y" ]; then
   docker start pgadmin4 || docker run \
     --publish 80:80 \
     --name "pgadmin4" \
@@ -54,9 +58,11 @@ if [ $USE_PGADMIN4 = "y" ] || [ $USE_PGADMIN4 = "Y" ]; then
 fi
 
 
+read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT
 # Import osm data file
-read -p "The OSM file that should be imported (will be skipped if file cannot be found) " IMPORT_FILE
-if [ -f "$IMPORT_FILE" ]; then
+if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
+  read -p "Enter the OSM file that should be imported: " IMPORT_FILE
+  # Run osm2pgsql import scripts
   osm2pgsql \
     --host "localhost" \
     --slim \
@@ -65,6 +71,19 @@ if [ -f "$IMPORT_FILE" ]; then
     --output flex \
     --style "$(pwd)/scripts/osm2pgsql/main.lua" \
     $IMPORT_FILE
+fi
+
+
+read -p "Do you want to run the export? (y/n) " RUN_EXPORT
+# Export to VDV462 xml file
+if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
+  echo "Exporting..."
+  # Run export sql script via psql
+  cat ./scripts/pgsql/export.sql | \
+    docker exec -i osm2vdv462_postgis \
+    psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" \
+    > $EXPORT_FILE
+  echo "Done. Export has been saved to $(pwd)/$EXPORT_FILE"
 fi
 
 

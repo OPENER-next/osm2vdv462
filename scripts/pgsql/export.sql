@@ -269,9 +269,3 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
 FROM export_data ex
 -- area_dhid and area_name will be identical for the same relation_id since they are just duplicates from previous joins
 GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom
-
-
-
-
-
-
