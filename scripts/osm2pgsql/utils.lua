@@ -44,17 +44,6 @@ function set_row_geom_by_type(row, object, osm_type)
 end
 
 
--- Check whether a given tag table contains at least one column from a given columns table
-function contains_tag_from_columns(tags, columns)
-    for _, entry in pairs(columns) do
-        if tags[entry.column] ~= nil then
-            return true
-        end
-    end
-    return false
-end
-
-
 -- Helper function that looks at the tags and decides if this is possibly an area.
 function has_area_tags(tags)
     if tags.area == 'yes' then
@@ -90,4 +79,15 @@ function has_area_tags(tags)
         or tags['abandoned:landuse']
         or tags['abandoned:power']
         or tags['area:highway']
+end
+
+
+-- Helper function to check whether a list contains a given value or not.
+function list_has_value(list, val)
+    for index, value in ipairs(list) do
+        if value == val then
+            return true
+        end
+    end
+    return false
 end
