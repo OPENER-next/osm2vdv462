@@ -16,6 +16,7 @@ function osm2pgsql.process_way(object)
 end
 
 function osm2pgsql.process_relation(object)
+    if extract_public_transport_stops(object, 'relation') then return end
     if extract_public_transport_areas(object) then return end
     extract_pois(object, 'relation')
 end
