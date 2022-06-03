@@ -108,28 +108,6 @@ local poi_mappings = {
         },
     },
     {
-        label = 'door',
-        tags = {
-            door = true,
-            access = {
-                false,
-                'customers',
-                'yes'
-            }
-        },
-    },
-    {
-        label = 'entrance',
-        tags = {
-            entrance = true,
-            access = {
-                false,
-                'customers',
-                'yes'
-            }
-        },
-    },
-    {
         label = 'ticket_shop',
         tags = {
             shop = {

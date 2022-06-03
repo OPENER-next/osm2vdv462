@@ -82,6 +82,33 @@ function has_area_tags(tags)
 end
 
 
+-- Check whether the given tags match any condition from the list
+function matches(tags, condition_list)
+    for _, condition in ipairs(condition_list) do
+        if (condition_matches_tags(condition, tags)) then
+            return true
+        end
+    end
+    return false
+end
+
+
+function condition_matches_tags(condition, tags)
+    for key, values in pairs(condition) do
+        local tagValue = tags[key]
+
+        if tagValue == nil then
+            if values == true or not list_has_value(values, false) then
+                return false
+            end
+        elseif values ~= true and not list_has_value(values, tagValue) then
+            return false
+        end
+    end
+    return true
+end
+
+
 -- Helper function to check whether a list contains a given value or not.
 function list_has_value(list, val)
     for index, value in ipairs(list) do
