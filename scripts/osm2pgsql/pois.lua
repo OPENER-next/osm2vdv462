@@ -47,44 +47,10 @@ local poi_mappings = {
         },
     },
     {
-        label = 'taxi',
-        tags = {
-            amenity = {
-                'taxi'
-            }
-        },
-    },
-    {
         label = 'parking_entrance',
         tags = {
             amenity = {
                 'parking_entrance'
-            }
-        },
-    },
-    {
-        label = 'parking',
-        tags = {
-            amenity = {
-                'parking'
-            },
-            access = {
-                false,
-                'customers',
-                'yes'
-            }
-        },
-    },
-    {
-        label = 'bicycle_parking',
-        tags = {
-            amenity = {
-                'bicycle_parking'
-            },
-            access = {
-                false,
-                'customers',
-                'yes'
             }
         },
     },
@@ -96,14 +62,6 @@ local poi_mappings = {
             },
             vending = {
                 'public_transport_tickets'
-            }
-        },
-    },
-    {
-        label = 'subway_entrance',
-        tags = {
-            railway = {
-                'subway_entrance'
             }
         },
     },

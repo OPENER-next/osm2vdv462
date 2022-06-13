@@ -3,18 +3,18 @@ require 'utils'
 
 local extract_conditions = {
     {
-        entrance = {
+        ['entrance'] = {
             'yes', 'main', 'secondary', 'emergency', 'exit', 'entrance'
         },
-        access = {
+        ['access'] = {
             false, 'customers', 'yes'
         }
     },
     {
-        railway = {
+        ['railway'] = {
             'train_station_entrance', 'subway_entrance'
         },
-        access = {
+        ['access'] = {
             false, 'customers', 'yes'
         }
     },
@@ -44,4 +44,3 @@ function extract_entrances(object)
     end
     return is_entrance
 end
-
