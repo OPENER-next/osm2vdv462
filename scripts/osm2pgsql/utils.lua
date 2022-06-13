@@ -82,6 +82,20 @@ function has_area_tags(tags)
 end
 
 
+-- Meta function to extract geometry and tags by conditions into a given table
+function extract_by_conditions_to_table(object, osm_type, extract_conditions, table)
+    local is_matching = matches(object.tags, extract_conditions)
+    if is_matching then
+        local row = {
+            tags = object.tags
+        }
+        set_row_geom_by_type(row, object, osm_type)
+        table:add_row(row)
+    end
+    return is_matching
+end
+
+
 -- Check whether the given tags match any condition from the list
 function matches(tags, condition_list)
     for _, condition in ipairs(condition_list) do

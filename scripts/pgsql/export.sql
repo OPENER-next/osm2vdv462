@@ -191,6 +191,16 @@ CREATE OR REPLACE VIEW public_transport_areas_with_geom AS (
 );
 
 
+/*
+ * Create view that returns all entrances of train stations.
+ * This returns all entrances from the entrance table that lie on the border of OR inside a train station building.
+ */
+CREATE OR REPLACE VIEW entrances_of_train_stations AS (
+  SELECT ts.tags -> 'name' AS train_station_name, ent.*
+  FROM train_stations ts
+  JOIN entrances AS ent
+  ON ST_Covers(ts.geom, ent.geom)
+);
 
 -- Build final export data table
 -- Join all stops to their stop areas
