@@ -18,35 +18,21 @@ local extract_conditions = {
     },
 }
 
-
--- Create tables
-
-local tables = {
-    -- Create table that contains all parking
-    parking = osm2pgsql.define_table({
-        name = "parking",
-        ids = {
-            type = 'any',
-            id_column = 'osm_id',
-            type_column = 'osm_type'
-        },
-        columns = {
-            { column = 'tags', type = 'jsonb' },
-            { column = 'geom', type = 'geometry' }
-        }
-    })
-}
+-- Create table that contains all parking
+local parking_table = osm2pgsql.define_table({
+    name = "parking",
+    ids = {
+        type = 'any',
+        id_column = 'osm_id',
+        type_column = 'osm_type'
+    },
+    columns = {
+        { column = 'tags', type = 'jsonb' },
+        { column = 'geom', type = 'geometry' }
+    }
+})
 
 
 function extract_parking(object, osm_type)
-    local is_parking = matches(object.tags, extract_conditions)
-    if is_parking then
-        local row = {
-            tags = object.tags
-        }
-        set_row_geom_by_type(row, object, osm_type)
-
-        tables.parking:add_row(row)
-    end
-    return is_parking
+    return extract_by_conditions_to_table(object, osm_type, extract_conditions, parking_table)
 end

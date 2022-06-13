@@ -1,6 +1,5 @@
 require 'utils'
 
-
 local extract_conditions = {
     {
         ['entrance'] = {
@@ -20,27 +19,13 @@ local extract_conditions = {
     },
 }
 
-
--- Create tables
-
-local tables = {
-    -- Create table that contains all entrances
-    entrances = osm2pgsql.define_node_table("entrances", {
-        { column = 'tags', type = 'jsonb' },
-        { column = 'geom', type = 'point' },
-    })
-}
+-- Create table that contains all entrances
+local entrances_table = osm2pgsql.define_node_table("entrances", {
+    { column = 'tags', type = 'jsonb' },
+    { column = 'geom', type = 'point' },
+})
 
 
-function extract_entrances(object)
-    local is_entrance = matches(object.tags, extract_conditions)
-    if is_entrance then
-        local row = {
-            tags = object.tags
-        }
-        set_row_geom_by_type(row, object, 'node')
-
-        tables.entrances:add_row(row)
-    end
-    return is_entrance
+function extract_entrances(object, osm_type)
+    return extract_by_conditions_to_table(object, 'node', extract_conditions, entrances_table)
 end
