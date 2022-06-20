@@ -50,7 +50,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Optionally additional key value pairs can be passed to the function
  * Returns null when no tag matching exists
  */
-CREATE OR REPLACE FUNCTION extract_key_list_xml(tags jsonb, additionalPairs xml) RETURNS xml AS
+CREATE OR REPLACE FUNCTION extract_key_list_xml(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
 $$
 DECLARE
   result xml;
@@ -173,6 +173,29 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
+/*
+ * Create a EntranceType element based on the tags: door, automatic_door
+ * Unused types: "openDoor" | "ticketBarrier" | "gate"
+ * If no match is found this will always return a EntranceType of "other"
+ */
+CREATE OR REPLACE FUNCTION extract_entrance_type_xml(tags jsonb) RETURNS xml AS
+$$
+SELECT xmlelement(name "EntranceType",
+  CASE
+    WHEN $1->>'door' = 'yes' THEN 'door'
+    WHEN $1->>'door' = 'no' THEN 'opening'
+    WHEN $1->>'door' = 'swinging' THEN 'swingDoor'
+    WHEN $1->>'door' = 'revolving' THEN 'revolvingDoor'
+    WHEN $1->>'automatic_door' = 'yes' OR
+         $1->>'automatic_door' = 'button' OR
+         $1->>'automatic_door' = 'motion' THEN 'automaticDoor'
+    ELSE 'other'
+  END
+)
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
 /***************
  * STOP_PLACES *
  ***************/
@@ -279,14 +302,14 @@ CREATE OR REPLACE VIEW final_entrances AS (
 
 
 /******************
- * PARKING_SPACES *
+ * PARKINGS *
  ******************/
 
 /*
  * Create view that matches all parking spaces to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every parking space that intersects it.
  */
-CREATE OR REPLACE VIEW parking_spaces_to_public_transport_areas AS (
+CREATE OR REPLACE VIEW parking_to_public_transport_areas AS (
   SELECT pta.relation_id, parking.*
   FROM parking
   JOIN public_transport_areas_with_padded_hull AS pta
@@ -296,8 +319,8 @@ CREATE OR REPLACE VIEW parking_spaces_to_public_transport_areas AS (
 /*
  * All relevant parking spaces.
  */
-CREATE OR REPLACE VIEW final_parking_spaces AS (
-  SELECT * FROM parking_spaces_to_public_transport_areas
+CREATE OR REPLACE VIEW final_parking AS (
+  SELECT * FROM parking_to_public_transport_areas
 );
 
 
@@ -306,7 +329,7 @@ CREATE OR REPLACE VIEW final_parking_spaces AS (
  **********/
 
 DROP TYPE IF EXISTS category CASCADE;
-CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING_SPACE');
+CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'PATH_LINK');
 
 -- Build final export data table
 -- Join all stops to their stop areas
@@ -322,10 +345,10 @@ CREATE OR REPLACE VIEW export_data AS (
   -- Append all Parking Spaces to the table
   UNION ALL
     SELECT
-    'PARKING_SPACE'::category AS category,
+    'PARKING'::category AS category,
     pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
     par.tags AS tags, par.geom AS geom
-    FROM final_parking_spaces par
+    FROM final_parking par
     INNER JOIN public_transport_areas_with_geom pta
       ON par.relation_id = pta.relation_id
   -- Append all Entrances to the table
@@ -362,42 +385,70 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
     ex.area_tags,
     create_key_value_xml('GlobalID', ex.area_dhid)
   ),
+  xmlagg(ex.xml_children)
+)
+FROM (
+  SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom,
   CASE
     -- <quays>
-    WHEN TRUE THEN xmlelement(name "quays", (
+    WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
       xmlagg(
         -- <Quay>
-        xmlelement(name "Quay", ex.stop_dhid,
+        xmlelement(name "Quay", xmlattributes(ex.tags ->> 'ref:IFOPT' as id),
           -- <Name>
-          xmlelement(name "Name", ex.stop_name),
+          xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.area_name)),
           -- <ShortName>
-          extract_short_name_xml(ex.area_tags),
+          extract_short_name_xml(ex.tags),
           -- <AlternativeName>
-          extract_alternative_names_xml(ex.stop_tags),
+          extract_alternative_names_xml(ex.tags),
           -- <Centroid>
-          geom_to_centroid_xml(ex.stop_geom),
+          geom_to_centroid_xml(ex.geom),
           -- <keyList>
           extract_key_list_xml(
-            ex.stop_tags,
-            create_key_value_xml('GlobalID', ex.stop_dhid)
+            ex.tags,
+            create_key_value_xml('GlobalID', ex.tags ->> 'ref:IFOPT')
           )
         )
       )
     ))
-    WHEN FALSE THEN xmlelement(name "accessSpaces", (
+    -- <entrances>
+    WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
+      xmlagg(
+        -- <Entrance>
+        xmlelement(name "Entrance",
+          -- <Name>
+          xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
+          -- <Centroid>
+          geom_to_centroid_xml(ex.geom),
+          -- <EntranceType>
+          extract_entrance_type_xml(ex.tags),
+          -- <keyList>
+          extract_key_list_xml(
+            ex.tags
+          )
+        )
+      )
+    ))
+    WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
+      xmlagg(
+        -- ....
+        xmlelement(name "Dummy_PARKING")
+      )
+    ))
+    WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
       xmlagg(
         -- ....
         xmlelement(name "Dummy")
       )
     ))
-    WHEN FALSE THEN xmlelement(name "pathLinks", (
+    WHEN ex.category = 'PATH_LINK' THEN xmlelement(name "pathLinks", (
       xmlagg(
         -- ....
         xmlelement(name "Dummy")
       )
     ))
-  END
-)
-FROM export_data ex
--- area_dhid and area_name will be identical for the same relation_id since they are just duplicates from previous joins
+  END AS xml_children
+  FROM export_data ex
+  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.category
+) AS ex
 GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom
