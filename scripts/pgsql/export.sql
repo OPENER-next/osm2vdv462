@@ -1,3 +1,7 @@
+/********************
+ * EXPORT FUNCTIONS *
+ ********************/
+
 /*
  * Create a centroid element from any geometry
  * Returns null when any argument is null
@@ -169,6 +173,10 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
+/***************
+ * STOP_PLACES *
+ ***************/
+
 /*
  * Create view that contains all stop areas with a geometry column derived from their members
  *
@@ -192,31 +200,145 @@ CREATE OR REPLACE VIEW public_transport_areas_with_geom AS (
 
 
 /*
+ * Create view that contains all stop areas with hull enclosing all stops.
+ * The hull is padded by 100 meters
+ */
+CREATE OR REPLACE VIEW public_transport_areas_with_padded_hull AS (
+  SELECT
+    relation_id,
+    -- Expand the hull geometry
+    ST_Buffer(
+      -- Create a single hull geometry based on the collection
+      ST_ConvexHull(geom),
+      100
+    ) AS geom
+  FROM public_transport_areas_with_geom
+);
+
+
+/*********
+ * QUAYS *
+ *********/
+
+/*
+ * All quays.
+ */
+CREATE OR REPLACE VIEW final_quays AS (
+  SELECT ptr.relation_id, pts.*
+  FROM public_transport_areas_members_ref ptr
+  INNER JOIN public_transport_stops pts
+    ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
+);
+
+
+/*************
+ * ENTRANCES *
+ *************/
+
+/*
+ * Create view that matches all entrances to public transport areas.
+ * This uses the padded hull of stop areas and matches/joins every entrance that is contained.
+ */
+CREATE OR REPLACE VIEW entrances_to_public_transport_areas AS (
+  SELECT pta.relation_id, entrances.*
+  FROM entrances
+  JOIN public_transport_areas_with_padded_hull AS pta
+  ON ST_Intersects(pta.geom, entrances.geom)
+);
+
+
+/*
  * Create view that returns all entrances of train stations.
  * This returns all entrances from the entrance table that lie on the border of OR inside a train station building.
  */
 CREATE OR REPLACE VIEW entrances_of_train_stations AS (
   SELECT ts.tags -> 'name' AS train_station_name, ent.*
   FROM train_stations ts
-  JOIN entrances AS ent
+  JOIN entrances_to_public_transport_areas AS ent
   ON ST_Covers(ts.geom, ent.geom)
 );
+
+
+/*
+ * Add all railway entrances to all entrances that are part of a train station
+ * This view will contain all entrances that are relevant for public transport
+ */
+CREATE OR REPLACE VIEW final_entrances AS (
+  SELECT *
+  FROM entrances_of_train_stations
+  UNION
+    SELECT NULL AS "name", *
+    FROM entrances_to_public_transport_areas ent
+    WHERE ent.tags -> 'railway' IS NOT NULL
+);
+
+
+/*****************
+ * ACCESS_SPACES *
+ *****************/
+
+
+/******************
+ * PARKING_SPACES *
+ ******************/
+
+/*
+ * Create view that matches all parking spaces to public transport areas.
+ * This uses the padded hull of stop areas and matches/joins every parking space that intersects it.
+ */
+CREATE OR REPLACE VIEW parking_spaces_to_public_transport_areas AS (
+  SELECT pta.relation_id, parking.*
+  FROM parking
+  JOIN public_transport_areas_with_padded_hull AS pta
+  ON ST_Intersects(parking.geom, pta.geom)
+);
+
+/*
+ * All relevant parking spaces.
+ */
+CREATE OR REPLACE VIEW final_parking_spaces AS (
+  SELECT * FROM parking_spaces_to_public_transport_areas
+);
+
+
+/**********
+ * EXPORT *
+ **********/
+
+DROP TYPE IF EXISTS category CASCADE;
+CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING_SPACE');
 
 -- Build final export data table
 -- Join all stops to their stop areas
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
-
-CREATE TEMP TABLE export_data AS
-SELECT
-  pta.relation_id,
-  pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
-  pts.name AS stop_name, pts."ref:IFOPT" AS stop_dhid, pts.tags AS stop_tags, pts.geom AS stop_geom
-FROM public_transport_areas_members_ref ptr
-INNER JOIN public_transport_areas_with_geom pta
-  ON pta.relation_id = ptr.relation_id
-INNER JOIN public_transport_stops pts
-  ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type;
-
+CREATE OR REPLACE VIEW export_data AS (
+  SELECT
+    'QUAY'::category AS category,
+    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
+    qua.tags AS tags, qua.geom AS geom
+  FROM final_quays qua
+  INNER JOIN public_transport_areas_with_geom pta
+    ON qua.relation_id = pta.relation_id
+  -- Append all Parking Spaces to the table
+  UNION ALL
+    SELECT
+    'PARKING_SPACE'::category AS category,
+    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
+    par.tags AS tags, par.geom AS geom
+    FROM final_parking_spaces par
+    INNER JOIN public_transport_areas_with_geom pta
+      ON par.relation_id = pta.relation_id
+  -- Append all Entrances to the table
+  UNION ALL
+    SELECT
+    'ENTRANCE'::category AS category,
+    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
+    ent.tags AS tags, ent.geom AS geom
+    FROM final_entrances ent
+    INNER JOIN public_transport_areas_with_geom pta
+      ON ent.relation_id = pta.relation_id
+  ORDER BY relation_id
+);
 
 -- Final export to XML
 
