@@ -6,7 +6,7 @@
  * Create a centroid element from any geometry
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION geom_to_centroid_xml(a geometry) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_Centroid(a geometry) RETURNS xml AS
 $$
 SELECT xmlelement(name "Centroid",
   xmlelement(name "Location",
@@ -22,7 +22,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create a single key value pair element
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_key_value_xml(a anyelement, b anyelement) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_KeyValue(a anyelement, b anyelement) RETURNS xml AS
 $$
 SELECT xmlelement(name "KeyValue",
   xmlelement(name "Key", $1),
@@ -39,7 +39,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION delfi_attribute_on_yes_xml(delfiid text, val text) RETURNS xml AS
 $$
 SELECT CASE
-  WHEN $2 = 'yes' THEN create_key_value_xml($1, '')
+  WHEN $2 = 'yes' THEN create_KeyValue($1, '')
 END
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
@@ -50,7 +50,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Optionally additional key value pairs can be passed to the function
  * Returns null when no tag matching exists
  */
-CREATE OR REPLACE FUNCTION extract_key_list_xml(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_keyList(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
 $$
 DECLARE
   result xml;
@@ -78,7 +78,7 @@ LANGUAGE plpgsql IMMUTABLE;
  * From: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
  * If no match is found this will always return a StopPlaceType of "other"
  */
-CREATE OR REPLACE FUNCTION extract_stop_place_type_xml(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_StopPlaceType(tags jsonb) RETURNS xml AS
 $$
 SELECT xmlelement(name "StopPlaceType",
   CASE
@@ -97,7 +97,7 @@ LANGUAGE SQL IMMUTABLE;
  * Create a single Lang Name pair element
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_alternative_name_xml(a text, b text) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_AlternativeName(a text, b text) RETURNS xml AS
 $$
 SELECT xmlelement(name "AlternativeName",
   xmlelement(name "Lang", $1),
@@ -111,20 +111,20 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create an AlternativeName element based on name:LANG_CODE tags
  * Returns null when no tag matching exists
  */
-CREATE OR REPLACE FUNCTION extract_alternative_names_xml(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_alternativeNames(tags jsonb) RETURNS xml AS
 $$
 DECLARE
   result xml;
 BEGIN
   result := xmlconcat(
-    create_alternative_name_xml('en', tags->>'name:en'),
-    create_alternative_name_xml('de', tags->>'name:de'),
-    create_alternative_name_xml('fr', tags->>'name:fr'),
-    create_alternative_name_xml('cs', tags->>'name:cs'),
-    create_alternative_name_xml('pl', tags->>'name:pl'),
-    create_alternative_name_xml('da', tags->>'name:da'),
-    create_alternative_name_xml('nl', tags->>'name:nl'),
-    create_alternative_name_xml('lb', tags->>'name:lb')
+    create_AlternativeName('en', tags->>'name:en'),
+    create_AlternativeName('de', tags->>'name:de'),
+    create_AlternativeName('fr', tags->>'name:fr'),
+    create_AlternativeName('cs', tags->>'name:cs'),
+    create_AlternativeName('pl', tags->>'name:pl'),
+    create_AlternativeName('da', tags->>'name:da'),
+    create_AlternativeName('nl', tags->>'name:nl'),
+    create_AlternativeName('lb', tags->>'name:lb')
   );
 
   IF result IS NOT NULL THEN
@@ -141,7 +141,7 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * Create an ShortName element based on short_name tag
  * Returns null otherwise
  */
-CREATE OR REPLACE FUNCTION extract_short_name_xml(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_ShortName(tags jsonb) RETURNS xml AS
 $$
 SELECT
   CASE
@@ -159,7 +159,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create a Description element based on description tag
  * Returns null otherwise
  */
-CREATE OR REPLACE FUNCTION extract_description_xml(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_Description(tags jsonb) RETURNS xml AS
 $$
 SELECT
   CASE
@@ -178,7 +178,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Unused types: "openDoor" | "ticketBarrier" | "gate"
  * If no match is found this will always return a EntranceType of "other"
  */
-CREATE OR REPLACE FUNCTION extract_entrance_type_xml(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_EntranceType(tags jsonb) RETURNS xml AS
 $$
 SELECT xmlelement(name "EntranceType",
   CASE
@@ -186,9 +186,7 @@ SELECT xmlelement(name "EntranceType",
     WHEN $1->>'door' = 'no' THEN 'opening'
     WHEN $1->>'door' = 'swinging' THEN 'swingDoor'
     WHEN $1->>'door' = 'revolving' THEN 'revolvingDoor'
-    WHEN $1->>'automatic_door' = 'yes' OR
-         $1->>'automatic_door' = 'button' OR
-         $1->>'automatic_door' = 'motion' THEN 'automaticDoor'
+    WHEN $1->>'automatic_door' IN ('yes', 'button', 'motion') THEN 'automaticDoor'
     ELSE 'other'
   END
 )
@@ -371,19 +369,19 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   -- <Name>
   xmlelement(name "Name", ex.area_name),
   -- <ShortName>
-  extract_short_name_xml(ex.area_tags),
-  -- <AlternativeName>
-  extract_alternative_names_xml(ex.area_tags),
+  ex_ShortName(ex.area_tags),
+  -- <alternativeNames>
+  ex_alternativeNames(ex.area_tags),
   -- <Description>
-  extract_description_xml(ex.area_tags),
+  ex_Description(ex.area_tags),
   -- <StopPlaceType>
-  extract_stop_place_type_xml(ex.area_tags),
+  ex_StopPlaceType(ex.area_tags),
   -- <Centroid>
-  geom_to_centroid_xml(area_geom),
+  ex_Centroid(area_geom),
   -- <keyList>
-  extract_key_list_xml(
+  ex_keyList(
     ex.area_tags,
-    create_key_value_xml('GlobalID', ex.area_dhid)
+    create_KeyValue('GlobalID', ex.area_dhid)
   ),
   xmlagg(ex.xml_children)
 )
@@ -398,15 +396,15 @@ FROM (
           -- <Name>
           xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.area_name)),
           -- <ShortName>
-          extract_short_name_xml(ex.tags),
-          -- <AlternativeName>
-          extract_alternative_names_xml(ex.tags),
+          ex_ShortName(ex.tags),
+          -- <alternativeNames>
+          ex_alternativeNames(ex.tags),
           -- <Centroid>
-          geom_to_centroid_xml(ex.geom),
+          ex_Centroid(ex.geom),
           -- <keyList>
-          extract_key_list_xml(
+          ex_keyList(
             ex.tags,
-            create_key_value_xml('GlobalID', ex.tags ->> 'ref:IFOPT')
+            create_KeyValue('GlobalID', ex.tags ->> 'ref:IFOPT')
           )
         )
       )
@@ -419,11 +417,11 @@ FROM (
           -- <Name>
           xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
           -- <Centroid>
-          geom_to_centroid_xml(ex.geom),
+          ex_Centroid(ex.geom),
           -- <EntranceType>
-          extract_entrance_type_xml(ex.tags),
+          ex_EntranceType(ex.tags),
           -- <keyList>
-          extract_key_list_xml(
+          ex_keyList(
             ex.tags
           )
         )
