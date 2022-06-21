@@ -70,6 +70,7 @@ if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
     --cache 2048 \
     --output flex \
     --style "$(pwd)/scripts/osm2pgsql/main.lua" \
+    --extra-attributes \
     $IMPORT_FILE
 fi
 

@@ -9,6 +9,7 @@ function build_row(object, columns, osm_type)
         set_row_geom_by_type(row, object, osm_type)
     end
     row.tags = object.tags
+    row.version = object.version
     return row
 end
 
@@ -87,7 +88,8 @@ function extract_by_conditions_to_table(object, osm_type, extract_conditions, ta
     local is_matching = matches(object.tags, extract_conditions)
     if is_matching then
         local row = {
-            tags = object.tags
+            tags = object.tags,
+            version = object.version
         }
         set_row_geom_by_type(row, object, osm_type)
         table:add_row(row)

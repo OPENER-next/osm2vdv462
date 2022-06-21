@@ -23,6 +23,7 @@ local extract_conditions = {
 local entrances_table = osm2pgsql.define_node_table("entrances", {
     { column = 'tags', type = 'jsonb' },
     { column = 'geom', type = 'point' },
+    { column = 'version', type = 'int' }
 })
 
 

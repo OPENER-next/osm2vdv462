@@ -12,6 +12,7 @@ local extract_conditions = {
 local stop_positions_table = osm2pgsql.define_node_table("stop_positions", {
     { column = 'tags', type = 'jsonb' },
     { column = 'geom', type = 'point' },
+    { column = 'version', type = 'int' }
 })
 
 
