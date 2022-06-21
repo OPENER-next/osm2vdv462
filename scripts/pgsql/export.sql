@@ -194,6 +194,64 @@ $$
 LANGUAGE SQL IMMUTABLE;
 
 
+/*
+ * Create a ParkingType element based on the tags: park_ride
+ * Unused types: "liftShareParking" | "urbanParking" | "airportParking" | "trainStationParking" | "exhibitionCentreParking" |
+ * "rentalCarParking" | "shoppingCentreParking" | "motorwayParking" | "roadside" | "parkingZone" | "cycleRental" | "other"
+ * If no match is found this will always return a ParkingType of "undefined"
+ */
+CREATE OR REPLACE FUNCTION ex_ParkingType(tags jsonb) RETURNS xml AS
+$$
+SELECT xmlelement(name "ParkingType",
+  CASE
+    WHEN $1->>'park_ride' IN ('yes', 'bus', 'ferry', 'metro', 'train', 'tram') THEN 'parkAndRide'
+    ELSE 'undefined'
+  END
+)
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a ParkingLayout element based on the tags: parking and covered
+ * Unused types: "cycleHire"
+ * If no match is found this will always return a ParkingLayout of "other"
+ */
+CREATE OR REPLACE FUNCTION ex_ParkingLayout(tags jsonb) RETURNS xml AS
+$$
+SELECT xmlelement(name "ParkingLayout",
+  CASE
+    WHEN $1->>'parking' IS NULL THEN 'undefined'
+    WHEN $1->>'parking' = 'multi-storey' THEN 'multistorey '
+    WHEN $1->>'parking' = 'underground' THEN 'underground'
+    WHEN $1->>'parking' = 'street_side' THEN 'roadside'
+    WHEN $1->>'parking' = 'surface' AND $1->>'covered' = 'yes' THEN 'covered'
+    WHEN $1->>'parking' = 'surface' THEN 'openSpace'
+    ELSE 'other'
+  END
+)
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a TotalCapacity element based on capacity tag
+ * Returns null otherwise
+ */
+CREATE OR REPLACE FUNCTION ex_TotalCapacity(tags jsonb) RETURNS xml AS
+$$
+SELECT
+  CASE
+    WHEN $1->>'capacity' IS NOT NULL THEN xmlelement(
+      name "TotalCapacity",
+      $1->>'capacity'
+    )
+    ELSE NULL
+  END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
 /***************
  * STOP_PLACES *
  ***************/
@@ -427,10 +485,26 @@ FROM (
         )
       )
     ))
+    -- <parkings>
     WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
       xmlagg(
-        -- ....
-        xmlelement(name "Dummy_PARKING")
+        -- <Parking>
+        xmlelement(name "Parking",
+          -- <Name>
+          xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
+          -- <Centroid>
+          ex_Centroid(ex.geom),
+          -- <ParkingType>
+          ex_ParkingType(ex.tags),
+          -- <ParkingLayout>
+          ex_ParkingLayout(ex.tags),
+          -- <TotalCapacity>
+          ex_TotalCapacity(ex.tags),
+          -- <keyList>
+          ex_keyList(
+            ex.tags
+          )
+        )
       )
     ))
     WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
