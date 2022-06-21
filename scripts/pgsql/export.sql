@@ -73,24 +73,43 @@ LANGUAGE plpgsql IMMUTABLE;
 
 
 /*
- * Create a StopPlaceType element based on the tags: train, subway, coach and bus
- * Unused types: "airport" | "harbourPort" | "ferrytPort" | "ferryStop" | "onStreetBus" | "onStreetTram" | "skiLift"
- * From: https://laidig.github.io/siri-20-java/doc/schemas/ifopt_stop-v0_3_xsd/simpleTypes/StopPlaceTypeEnumeration.html
- * If no match is found this will always return a StopPlaceType of "other"
+ * Create a QuayType element based on the tags: train, subway, tram, coach, bus, monorail and light_rail
+ * Note: this function also takes the geometry of the object to distinguish between a tramPlatform and tramStop
+ * Unused types: "airlineGate" | "busBay" | "boatQuay" | "ferryLanding" | "telecabinePlatform" | "taxiStand" | "setDownPlace" | "vehicleLoadingPlace"
+ * If no match is found this will always return NULL
  */
-CREATE OR REPLACE FUNCTION ex_StopPlaceType(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_QuayType(tags jsonb, geom geometry) RETURNS xml AS
 $$
-SELECT xmlelement(name "StopPlaceType",
-  CASE
-    WHEN $1->>'train' = 'yes' THEN 'railStation'
-    WHEN $1->>'subway' = 'yes' THEN 'metroStation'
-    WHEN $1->>'coach' = 'yes' THEN 'coachStation'
-    WHEN $1->>'bus' = 'yes' THEN 'busStation'
-    ELSE 'other'
-  END
-)
+DECLARE
+  result text;
+BEGIN
+  IF tags->>'train' = 'yes'
+    THEN result := 'railPlatform';
+  ELSEIF tags->>'subway' = 'yes'
+    THEN result := 'metroPlatform';
+  ELSEIF tags->>'tram' = 'yes' THEN
+    IF ST_GeometryType(geom) = 'ST_Point'
+      THEN result := 'tramStop';
+      ELSE result := 'tramPlatform';
+    END IF;
+  ELSEIF tags->>'coach' = 'yes'
+    THEN result := 'coachStop';
+  ELSEIF tags->>'bus' = 'yes'
+    THEN result := 'busStop';
+  ELSEIF tags->>'light_rail' = 'yes' OR
+         tags->>'monorail' = 'yes' OR
+         tags->>'funicular' = 'yes'
+    THEN result := 'other';
+  END IF;
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "QuayType", result);
+  END IF;
+
+  RETURN NULL;
+END
 $$
-LANGUAGE SQL IMMUTABLE;
+LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*
@@ -432,8 +451,6 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   ex_alternativeNames(ex.area_tags),
   -- <Description>
   ex_Description(ex.area_tags),
-  -- <StopPlaceType>
-  ex_StopPlaceType(ex.area_tags),
   -- <Centroid>
   ex_Centroid(area_geom),
   -- <keyList>
@@ -459,6 +476,8 @@ FROM (
           ex_alternativeNames(ex.tags),
           -- <Centroid>
           ex_Centroid(ex.geom),
+          -- <QuayType>
+          ex_QuayType(ex.tags, ex.geom),
           -- <keyList>
           ex_keyList(
             ex.tags,
