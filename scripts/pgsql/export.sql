@@ -412,26 +412,26 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'PA
 CREATE OR REPLACE VIEW export_data AS (
   SELECT
     'QUAY'::category AS category,
-    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
-    qua.tags AS tags, qua.geom AS geom
+    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+    qua.tags AS tags, qua.geom AS geom, qua.version AS version
   FROM final_quays qua
   INNER JOIN stop_areas_with_geom pta
     ON qua.relation_id = pta.relation_id
   -- Append all Parking Spaces to the table
   UNION ALL
     SELECT
-    'PARKING'::category AS category,
-    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
-    par.tags AS tags, par.geom AS geom
+      'PARKING'::category AS category,
+      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+      par.tags AS tags, par.geom AS geom, par.version AS version
     FROM final_parking par
     INNER JOIN stop_areas_with_geom pta
       ON par.relation_id = pta.relation_id
   -- Append all Entrances to the table
   UNION ALL
     SELECT
-    'ENTRANCE'::category AS category,
-    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
-    ent.tags AS tags, ent.geom AS geom
+      'ENTRANCE'::category AS category,
+      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+      ent.tags AS tags, ent.geom AS geom, ent.version AS version
     FROM final_entrances ent
     INNER JOIN stop_areas_with_geom pta
       ON ent.relation_id = pta.relation_id
@@ -442,7 +442,7 @@ CREATE OR REPLACE VIEW export_data AS (
 
 SELECT
 -- <StopPlace>
-xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
+xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version AS "version"),
   -- <Name>
   xmlelement(name "Name", ex.area_name),
   -- <ShortName>
@@ -461,13 +461,13 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid as id),
   xmlagg(ex.xml_children)
 )
 FROM (
-  SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom,
+  SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version,
   CASE
     -- <quays>
     WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
       xmlagg(
         -- <Quay>
-        xmlelement(name "Quay", xmlattributes(ex.tags ->> 'ref:IFOPT' as id),
+        xmlelement(name "Quay", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
           -- <Name>
           xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.area_name)),
           -- <ShortName>
@@ -490,7 +490,7 @@ FROM (
     WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
       xmlagg(
         -- <Entrance>
-        xmlelement(name "Entrance",
+        xmlelement(name "Entrance", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
           -- <Name>
           xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
           -- <Centroid>
@@ -508,7 +508,7 @@ FROM (
     WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
       xmlagg(
         -- <Parking>
-        xmlelement(name "Parking",
+        xmlelement(name "Parking", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
           -- <Name>
           xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
           -- <Centroid>
@@ -540,6 +540,6 @@ FROM (
     ))
   END AS xml_children
   FROM export_data ex
-  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.category
+  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version, ex.category
 ) AS ex
-GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom
+GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version
