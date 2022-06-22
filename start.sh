@@ -40,7 +40,7 @@ docker start osm2vdv462_postgis || docker run \
   --env "PG_PRIMARY_PORT=$PGPORT" \
   --hostname "osm2vdv462_postgis" \
   --detach \
-  postgis/postgis
+  postgis/postgis:14-master
 
 
 read -p "Do you want to use pgadmin4? (y/n) " USE_PGADMIN4

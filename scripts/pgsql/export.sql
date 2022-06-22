@@ -113,21 +113,35 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*
- * Create a single Lang Name pair element
+ * Create a single AlternativeName element with a NameType "translation" from a given language code and name.
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_AlternativeName(a text, b text) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_AlternativeTranslationName(a text, b text) RETURNS xml AS
 $$
 SELECT xmlelement(name "AlternativeName",
-  xmlelement(name "Lang", $1),
-  xmlelement(name "Name", $2)
+  xmlelement(name "NameType", 'translation'),
+  xmlelement(name "Name", xmlattributes($1 AS "lang"), $2)
 )
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create an AlternativeName element based on name:LANG_CODE tags
+ * Create a single AlternativeName element with a NameType "alias" from a given name.
+ * Returns null when any argument is null
+ */
+CREATE OR REPLACE FUNCTION create_AlternativeAliasName(a text) RETURNS xml AS
+$$
+SELECT xmlelement(name "AlternativeName",
+  xmlelement(name "NameType", 'alias'),
+  xmlelement(name "Name", $1)
+)
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create an AlternativeName element based on name:LANG_CODE and alt_name tags
  * Returns null when no tag matching exists
  */
 CREATE OR REPLACE FUNCTION ex_alternativeNames(tags jsonb) RETURNS xml AS
@@ -136,14 +150,20 @@ DECLARE
   result xml;
 BEGIN
   result := xmlconcat(
-    create_AlternativeName('en', tags->>'name:en'),
-    create_AlternativeName('de', tags->>'name:de'),
-    create_AlternativeName('fr', tags->>'name:fr'),
-    create_AlternativeName('cs', tags->>'name:cs'),
-    create_AlternativeName('pl', tags->>'name:pl'),
-    create_AlternativeName('da', tags->>'name:da'),
-    create_AlternativeName('nl', tags->>'name:nl'),
-    create_AlternativeName('lb', tags->>'name:lb')
+    create_AlternativeTranslationName('en', tags->>'name:en'),
+    create_AlternativeTranslationName('de', tags->>'name:de'),
+    create_AlternativeTranslationName('fr', tags->>'name:fr'),
+    create_AlternativeTranslationName('cs', tags->>'name:cs'),
+    create_AlternativeTranslationName('pl', tags->>'name:pl'),
+    create_AlternativeTranslationName('da', tags->>'name:da'),
+    create_AlternativeTranslationName('nl', tags->>'name:nl'),
+    create_AlternativeTranslationName('lb', tags->>'name:lb'),
+    (
+      SELECT xmlagg(
+        create_AlternativeAliasName(string_to_table)
+      )
+      FROM string_to_table(tags->>'alt_name', ';')
+    )
   );
 
   IF result IS NOT NULL THEN
@@ -157,21 +177,45 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*
- * Create an ShortName element based on short_name tag
+ * Create a Name element based on name, official_name, description tag
+ * Returns null otherwise
+ */
+CREATE OR REPLACE FUNCTION ex_Name(tags jsonb) RETURNS xml AS
+$$
+DECLARE
+  result text;
+BEGIN
+  result := COALESCE(tags->>'name', tags->>'name:de', tags->>'official_name', tags->>'description');
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "Name", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Create a ShortName element based on short_name tag
  * Returns null otherwise
  */
 CREATE OR REPLACE FUNCTION ex_ShortName(tags jsonb) RETURNS xml AS
 $$
-SELECT
-  CASE
-    WHEN $1->>'short_name' IS NOT NULL THEN xmlelement(
-      name "ShortName",
-      $1->>'short_name'
-    )
-    ELSE NULL
-  END
+DECLARE
+  result text;
+BEGIN
+  result := COALESCE(tags->>'short_name', tags->>'short_name:de');
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "ShortName", result);
+  END IF;
+
+  RETURN NULL;
+END
 $$
-LANGUAGE SQL IMMUTABLE STRICT;
+LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*
@@ -469,11 +513,9 @@ FROM (
         -- <Quay>
         xmlelement(name "Quay", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
           -- <Name>
-          xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.area_name)),
+          ex_Name(ex.tags),
           -- <ShortName>
           ex_ShortName(ex.tags),
-          -- <alternativeNames>
-          ex_alternativeNames(ex.tags),
           -- <Centroid>
           ex_Centroid(ex.geom),
           -- <QuayType>
@@ -492,7 +534,7 @@ FROM (
         -- <Entrance>
         xmlelement(name "Entrance", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
           -- <Name>
-          xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
+          ex_Name(ex.tags),
           -- <Centroid>
           ex_Centroid(ex.geom),
           -- <EntranceType>
@@ -510,7 +552,7 @@ FROM (
         -- <Parking>
         xmlelement(name "Parking", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
           -- <Name>
-          xmlelement(name "Name", COALESCE(ex.tags ->> 'name', ex.tags ->> 'description')),
+          ex_Name(ex.tags),
           -- <Centroid>
           ex_Centroid(ex.geom),
           -- <ParkingType>
