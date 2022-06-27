@@ -10,9 +10,10 @@ local extract_conditions = {
 
 -- Create table that contains all stop_positions
 local stop_positions_table = osm2pgsql.define_node_table("stop_positions", {
-    { column = 'tags', type = 'jsonb' },
-    { column = 'geom', type = 'point' },
-    { column = 'version', type = 'int' }
+    { column = 'IFOPT', type = 'text', not_null = true },
+    { column = 'tags', type = 'jsonb', not_null = true },
+    { column = 'geom', type = 'point', not_null = true },
+    { column = 'version', type = 'int', not_null = true }
 })
 
 

@@ -4,18 +4,23 @@ local extract_conditions = {
     {
         ['amenity'] = {
             'parking', 'motorcycle_parking', 'bicycle_parking', 'taxi'
-        },
-        ['access'] = { false, 'customers', 'yes' }
+        }
     },
     {
-        ['parking:lane:both'] = { 'yes', 'parallel', 'diagonal', 'perpendicular' }
+        ['parking:lane:both'] = {
+            'yes', 'parallel', 'diagonal', 'perpendicular'
+        }
     },
     {
-        ['parking:lane:left'] = { 'yes', 'parallel', 'diagonal', 'perpendicular' }
+        ['parking:lane:left'] = {
+            'yes', 'parallel', 'diagonal', 'perpendicular'
+        }
     },
     {
-        ['parking:lane:right'] = { 'yes', 'parallel', 'diagonal', 'perpendicular' }
-    },
+        ['parking:lane:right'] = {
+            'yes', 'parallel', 'diagonal', 'perpendicular'
+        }
+    }
 }
 
 -- Create table that contains all parking
@@ -27,9 +32,10 @@ local parking_table = osm2pgsql.define_table({
         type_column = 'osm_type'
     },
     columns = {
-        { column = 'tags', type = 'jsonb' },
-        { column = 'geom', type = 'geometry' },
-        { column = 'version', type = 'int' }
+        { column = 'IFOPT', type = 'text', not_null = true },
+        { column = 'tags', type = 'jsonb', not_null = true },
+        { column = 'geom', type = 'geometry', not_null = true },
+        { column = 'version', type = 'int', not_null = true }
     }
 })
 

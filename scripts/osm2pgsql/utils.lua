@@ -83,14 +83,24 @@ function has_area_tags(tags)
 end
 
 
--- Meta function to extract geometry and tags by conditions into a given table
+-- Meta function to extract geometry, tags and version by conditions into a given table
+-- If the table contains a column named "IFOPT" then this function will only extract elements with the tag "ref:IFOPT"
+-- The value will be put into the "IFOPT" column
 function extract_by_conditions_to_table(object, osm_type, extract_conditions, table)
+    local wants_IFOPT = table_has_column(table, 'IFOPT')
+    if wants_IFOPT and object.tags['ref:IFOPT'] == nil then
+        return false
+    end
+
     local is_matching = matches(object.tags, extract_conditions)
     if is_matching then
         local row = {
-            tags = object.tags,
             version = object.version
         }
+        if wants_IFOPT then
+            row.IFOPT = object:grab_tag('ref:IFOPT')
+        end
+        row.tags = object.tags
         set_row_geom_by_type(row, object, osm_type)
         table:add_row(row)
     end
@@ -129,6 +139,17 @@ end
 function list_has_value(list, val)
     for index, value in ipairs(list) do
         if value == val then
+            return true
+        end
+    end
+    return false
+end
+
+
+-- Helper function to check whether a table contains a given column or not.
+function table_has_column(table, column)
+    for index, entry in ipairs(table:columns()) do
+        if entry.name == column then
             return true
         end
     end

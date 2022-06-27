@@ -363,7 +363,7 @@ CREATE OR REPLACE VIEW stop_areas_with_padded_hull AS (
  *********/
 
 /*
- * All quays.
+ * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*
@@ -378,40 +378,14 @@ CREATE OR REPLACE VIEW final_quays AS (
  *************/
 
 /*
- * Create view that matches all entrances to public transport areas.
+ * Create view that matches all entrances geographically to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every entrance that is contained.
  */
-CREATE OR REPLACE VIEW entrances_to_stop_areas AS (
+CREATE OR REPLACE VIEW final_entrances AS (
   SELECT pta.relation_id, entrances.*
   FROM entrances
   JOIN stop_areas_with_padded_hull AS pta
-  ON ST_Intersects(pta.geom, entrances.geom)
-);
-
-
-/*
- * Create view that returns all entrances of train stations.
- * This returns all entrances from the entrance table that lie on the border of OR inside a train station building.
- */
-CREATE OR REPLACE VIEW entrances_of_train_stations AS (
-  SELECT ts.tags -> 'name' AS train_station_name, ent.*
-  FROM train_stations ts
-  JOIN entrances_to_stop_areas AS ent
-  ON ST_Covers(ts.geom, ent.geom)
-);
-
-
-/*
- * Add all railway entrances to all entrances that are part of a train station
- * This view will contain all entrances that are relevant for public transport
- */
-CREATE OR REPLACE VIEW final_entrances AS (
-  SELECT *
-  FROM entrances_of_train_stations
-  UNION
-    SELECT NULL AS "name", *
-    FROM entrances_to_stop_areas ent
-    WHERE ent.tags -> 'railway' IS NOT NULL
+    ON ST_Intersects(pta.geom, entrances.geom)
 );
 
 
@@ -425,14 +399,14 @@ CREATE OR REPLACE VIEW final_entrances AS (
  ******************/
 
 /*
- * Create view that matches all parking spaces to public transport areas.
+ * Create view that matches all parking spaces geographically to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every parking space that intersects it.
  */
 CREATE OR REPLACE VIEW parking_to_stop_areas AS (
   SELECT pta.relation_id, parking.*
   FROM parking
   JOIN stop_areas_with_padded_hull AS pta
-  ON ST_Intersects(parking.geom, pta.geom)
+    ON ST_Intersects(parking.geom, pta.geom)
 );
 
 /*
@@ -457,7 +431,7 @@ CREATE OR REPLACE VIEW export_data AS (
   SELECT
     'QUAY'::category AS category,
     pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-    qua.tags AS tags, qua.geom AS geom, qua.version AS version
+    qua."IFOPT" AS "IFOPT", qua.tags AS tags, qua.geom AS geom, qua.version AS version
   FROM final_quays qua
   INNER JOIN stop_areas_with_geom pta
     ON qua.relation_id = pta.relation_id
@@ -466,7 +440,7 @@ CREATE OR REPLACE VIEW export_data AS (
     SELECT
       'PARKING'::category AS category,
       pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-      par.tags AS tags, par.geom AS geom, par.version AS version
+      par."IFOPT" AS "IFOPT", par.tags AS tags, par.geom AS geom, par.version AS version
     FROM final_parking par
     INNER JOIN stop_areas_with_geom pta
       ON par.relation_id = pta.relation_id
@@ -475,7 +449,7 @@ CREATE OR REPLACE VIEW export_data AS (
     SELECT
       'ENTRANCE'::category AS category,
       pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-      ent.tags AS tags, ent.geom AS geom, ent.version AS version
+      ent."IFOPT" AS "IFOPT", ent.tags AS tags, ent.geom AS geom, ent.version AS version
     FROM final_entrances ent
     INNER JOIN stop_areas_with_geom pta
       ON ent.relation_id = pta.relation_id
@@ -511,7 +485,7 @@ FROM (
     WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
       xmlagg(
         -- <Quay>
-        xmlelement(name "Quay", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
+        xmlelement(name "Quay", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <ShortName>
@@ -532,7 +506,7 @@ FROM (
     WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
       xmlagg(
         -- <Entrance>
-        xmlelement(name "Entrance", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
+        xmlelement(name "Entrance", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <Centroid>
@@ -550,7 +524,7 @@ FROM (
     WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
       xmlagg(
         -- <Parking>
-        xmlelement(name "Parking", xmlattributes(ex.tags ->> 'ref:IFOPT' AS "id", ex.version AS "version"),
+        xmlelement(name "Parking", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <Centroid>
