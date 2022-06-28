@@ -5,7 +5,7 @@ require 'utils'
 local extract_conditions = {
     {
         ['indoor'] = {
-            'area', 'corridor'
+            'area', 'corridor', 'room'
         }
     },
     {

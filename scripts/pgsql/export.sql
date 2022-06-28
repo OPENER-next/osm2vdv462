@@ -315,6 +315,47 @@ $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 
+/*
+ * Create an AccessSpaceType element based on a variety of tags.
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_AccessSpaceType(tags jsonb) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+  IF tags->>'indoor' = 'area' OR
+     tags->>'highway' = 'pedestrian' AND tags->>'area' = 'yes' OR
+     tags->>'place' = 'square' OR
+     tags->>'room' = 'entrance'
+    THEN result := 'concourse';
+  ELSEIF tags->>'bridge' = 'yes'
+    THEN result := 'overpass';
+  ELSEIF tags->>'tunnel' = 'yes'
+    THEN result := 'underpass';
+  ELSEIF tags->>'highway' = 'elevator'
+    THEN result := 'lift';
+  ELSEIF tags->>'indoor' = 'corridor' OR
+         tags->>'highway' IN ('footway', 'pedestrian', 'path', 'corridor') OR
+         tags->>'room' = 'corridor'
+    THEN result := 'passage';
+  ELSEIF tags->>'stairs' = 'yes' OR
+         tags->>'room' = 'stairs'
+    THEN result := 'staircase';
+  ELSEIF tags->>'room' = 'waiting'
+    THEN result := 'waitingRoom';
+  END IF;
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "AccessSpaceType", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
 /***************
  * STOP_PLACES *
  ***************/
@@ -385,7 +426,7 @@ CREATE OR REPLACE VIEW final_entrances AS (
   SELECT pta.relation_id, entrances.*
   FROM entrances
   JOIN stop_areas_with_padded_hull AS pta
-    ON ST_Intersects(pta.geom, entrances.geom)
+    ON ST_Covers(pta.geom, entrances.geom)
 );
 
 
@@ -393,27 +434,31 @@ CREATE OR REPLACE VIEW final_entrances AS (
  * ACCESS_SPACES *
  *****************/
 
+/*
+ * Create view that matches all access spaces geographically to public transport areas.
+ * This uses the padded hull of stop areas and matches/joins every access space that intersects it.
+ */
+CREATE OR REPLACE VIEW final_access_spaces AS (
+  SELECT pta.relation_id, access_spaces.*
+  FROM access_spaces
+  JOIN stop_areas_with_padded_hull AS pta
+    ON ST_Intersects(pta.geom, access_spaces.geom)
+);
 
-/******************
+
+/************
  * PARKINGS *
- ******************/
+ ************/
 
 /*
  * Create view that matches all parking spaces geographically to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every parking space that intersects it.
  */
-CREATE OR REPLACE VIEW parking_to_stop_areas AS (
+CREATE OR REPLACE VIEW final_parkings AS (
   SELECT pta.relation_id, parking.*
   FROM parking
   JOIN stop_areas_with_padded_hull AS pta
     ON ST_Intersects(parking.geom, pta.geom)
-);
-
-/*
- * All relevant parking spaces.
- */
-CREATE OR REPLACE VIEW final_parking AS (
-  SELECT * FROM parking_to_stop_areas
 );
 
 
@@ -435,15 +480,6 @@ CREATE OR REPLACE VIEW export_data AS (
   FROM final_quays qua
   INNER JOIN stop_areas_with_geom pta
     ON qua.relation_id = pta.relation_id
-  -- Append all Parking Spaces to the table
-  UNION ALL
-    SELECT
-      'PARKING'::category AS category,
-      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-      par."IFOPT" AS "IFOPT", par.tags AS tags, par.geom AS geom, par.version AS version
-    FROM final_parking par
-    INNER JOIN stop_areas_with_geom pta
-      ON par.relation_id = pta.relation_id
   -- Append all Entrances to the table
   UNION ALL
     SELECT
@@ -453,6 +489,24 @@ CREATE OR REPLACE VIEW export_data AS (
     FROM final_entrances ent
     INNER JOIN stop_areas_with_geom pta
       ON ent.relation_id = pta.relation_id
+  -- Append all AccessSpaces to the table
+  UNION ALL
+    SELECT
+      'ACCESS_SPACE'::category AS category,
+      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+      acc."IFOPT" AS "IFOPT", acc.tags AS tags, acc.geom AS geom, acc.version AS version
+    FROM final_access_spaces acc
+    INNER JOIN stop_areas_with_geom pta
+      ON acc.relation_id = pta.relation_id
+  -- Append all Parking Spaces to the table
+  UNION ALL
+    SELECT
+      'PARKING'::category AS category,
+      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+      par."IFOPT" AS "IFOPT", par.tags AS tags, par.geom AS geom, par.version AS version
+    FROM final_parkings par
+    INNER JOIN stop_areas_with_geom pta
+      ON par.relation_id = pta.relation_id
   ORDER BY relation_id
 );
 
@@ -520,6 +574,23 @@ FROM (
         )
       )
     ))
+    WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
+      xmlagg(
+        -- <Parking>
+        xmlelement(name "AccessSpace", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
+          -- <Name>
+          ex_Name(ex.tags),
+          -- <Centroid>
+          ex_Centroid(ex.geom),
+          -- <AccessSpaceType>
+          ex_AccessSpaceType(ex.tags),
+          -- <keyList>
+          ex_keyList(
+            ex.tags
+          )
+        )
+      )
+    ))
     -- <parkings>
     WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
       xmlagg(
@@ -540,12 +611,6 @@ FROM (
             ex.tags
           )
         )
-      )
-    ))
-    WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
-      xmlagg(
-        -- ....
-        xmlelement(name "Dummy")
       )
     ))
     WHEN ex.category = 'PATH_LINK' THEN xmlelement(name "pathLinks", (
