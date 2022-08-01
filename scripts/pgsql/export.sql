@@ -356,6 +356,93 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/****************
+ * PATH FINDING *
+ ****************/
+
+/*
+ * This function finds all paths between a given list of target nodes.
+ * Returns a table of arrays, while each array is a list of node ids.
+ */
+CREATE OR REPLACE FUNCTION get_paths_connecting_nodes(target_nodes INT[]) RETURNS TABLE (nodes_path INT[]) AS
+$$
+DECLARE
+    -- holds all target nodes that haven't been used as a starting point yet
+    unvisited_target_nodes INT[];
+
+    current_node INT;
+
+    touching_nodes INT[];
+
+    nodes_path INT[];
+BEGIN
+    unvisited_target_nodes := target_nodes;
+    -- Loop as long as we have at least two unvisited target nodes
+    -- Because when we are at the last node we already found all ways to this node
+    -- From the previous searches of the other nodes
+    WHILE array_length(unvisited_target_nodes, 1) > 1 LOOP
+      -- init nodes path with current target node
+      nodes_path := ARRAY[ unvisited_target_nodes[1] ];
+      -- remove first element from the array
+      unvisited_target_nodes := unvisited_target_nodes[2:];
+      -- get all initial touching nodes from the target node
+      touching_nodes := get_touching_nodes_by_path(nodes_path);
+
+      -- Loop through nodes till all have been visited
+      WHILE array_length(touching_nodes, 1) > 0 LOOP
+        -- get first array element
+        current_node := touching_nodes[1];
+        IF current_node IS NULL THEN
+          -- the two lines below basically remove the first array element
+          nodes_path := nodes_path[2:];
+          touching_nodes := touching_nodes[2:];
+          CONTINUE;
+        END IF;
+        -- set first/current touching edge to NULL indicating that it has been visited/consumed
+        touching_nodes[1] := NULL;
+        -- add the popped element to the current nodes path
+        nodes_path := array_prepend(current_node, nodes_path);
+        -- check whether the current node is any of the unvisited target nodes
+        IF current_node = ANY(unvisited_target_nodes) THEN
+          -- return current edge path (note that it is inversed)
+          RETURN QUERY SELECT nodes_path;
+        ELSE
+          -- get all nodes that touch the end of the current path
+          -- and that are not part of the nodes path (prevents circles)
+          -- add them to the start of touching_nodes if any
+          touching_nodes := get_touching_nodes_by_path(nodes_path) || touching_nodes;
+        END IF;
+      END LOOP;
+    END LOOP;
+
+    RETURN;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
+
+/*
+ * Get all nodes that touch the end of the given path and that are not part of the path (prevents circles).
+ * A path is an array of nodes where the first array element resembles the end of the path,
+ * while the last node resembles the start.
+ */
+CREATE OR REPLACE FUNCTION get_touching_nodes_by_path(path INT[]) RETURNS INT[] AS
+$$
+  SELECT ARRAY(
+    SELECT start_node
+    FROM ways_topo.edge_data
+    WHERE end_node = path[1] AND start_node != ALL(path)
+
+    UNION
+
+    SELECT end_node
+    FROM ways_topo.edge_data
+    WHERE start_node = path[1] AND end_node != ALL(path)
+  )
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
 /***************
  * STOP_PLACES *
  ***************/
