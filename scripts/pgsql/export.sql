@@ -55,6 +55,47 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
+ * Create a LineString element from a line string geometry
+ * Returns null when any argument is null
+ */
+CREATE OR REPLACE FUNCTION ex_LineString(a geometry) RETURNS xml AS
+$$
+-- see https://postgis.net/docs/ST_AsGML.html
+SELECT xml( ST_AsGML(3, $1, 15, 22, '') );
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a Distance element from a line string
+ * Returns null when any argument is null
+ */
+CREATE OR REPLACE FUNCTION ex_Distance(a geometry) RETURNS xml AS
+$$
+SELECT xmlelement(name "Distance", ST_Length($1))
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Creates the From and To element based on given ids and version
+ * Returns null when any argument is null
+ */
+CREATE OR REPLACE FUNCTION ex_FromTo(a text, b text, c int) RETURNS xml AS
+$$
+SELECT xmlconcat(
+  xmlelement(name "From",
+    xmlelement(name "PlaceRef", xmlattributes($1 AS "ref", $3 AS "version"))
+  ),
+  xmlelement(name "To",
+    xmlelement(name "PlaceRef", xmlattributes($2 AS "ref", $3 AS "version"))
+  )
+)
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
  * Create a single key value pair element
  * Returns null when any argument is null
  */
