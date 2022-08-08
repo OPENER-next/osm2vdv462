@@ -646,40 +646,35 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'PA
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
 CREATE OR REPLACE VIEW export_data AS (
   SELECT
-    'QUAY'::category AS category,
-    pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-    qua."IFOPT" AS "IFOPT", qua.tags AS tags, qua.geom AS geom, qua.version AS version
-  FROM final_quays qua
+    pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+    stop_elements.*
+  FROM (
+    SELECT
+      'QUAY'::category AS category, relation_id,
+      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, qua.version AS version
+    FROM final_quays qua
+    -- Append all Entrances to the table
+    UNION ALL
+      SELECT
+        'ENTRANCE'::category AS category, relation_id,
+        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, ent.version AS version
+      FROM final_entrances ent
+    -- Append all AccessSpaces to the table
+    UNION ALL
+      SELECT
+        'ACCESS_SPACE'::category AS category, relation_id,
+        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc.version AS version
+      FROM final_access_spaces acc
+    -- Append all Parking Spaces to the table
+    UNION ALL
+      SELECT
+        'PARKING'::category AS category, relation_id,
+        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, par.version AS version
+      FROM final_parkings par
+  ) stop_elements
   INNER JOIN stop_areas_with_geom pta
-    ON qua.relation_id = pta.relation_id
-  -- Append all Entrances to the table
-  UNION ALL
-    SELECT
-      'ENTRANCE'::category AS category,
-      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-      ent."IFOPT" AS "IFOPT", ent.tags AS tags, ent.geom AS geom, ent.version AS version
-    FROM final_entrances ent
-    INNER JOIN stop_areas_with_geom pta
-      ON ent.relation_id = pta.relation_id
-  -- Append all AccessSpaces to the table
-  UNION ALL
-    SELECT
-      'ACCESS_SPACE'::category AS category,
-      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-      acc."IFOPT" AS "IFOPT", acc.tags AS tags, acc.geom AS geom, acc.version AS version
-    FROM final_access_spaces acc
-    INNER JOIN stop_areas_with_geom pta
-      ON acc.relation_id = pta.relation_id
-  -- Append all Parking Spaces to the table
-  UNION ALL
-    SELECT
-      'PARKING'::category AS category,
-      pta.relation_id, pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
-      par."IFOPT" AS "IFOPT", par.tags AS tags, par.geom AS geom, par.version AS version
-    FROM final_parkings par
-    INNER JOIN stop_areas_with_geom pta
-      ON par.relation_id = pta.relation_id
-  ORDER BY relation_id
+    ON stop_elements.relation_id = pta.relation_id
+  ORDER BY pta.relation_id
 );
 
 -- Final export to XML
@@ -711,7 +706,7 @@ FROM (
     WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
       xmlagg(
         -- <Quay>
-        xmlelement(name "Quay", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
+        xmlelement(name "Quay", xmlattributes(ex.id AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <ShortName>
@@ -723,7 +718,7 @@ FROM (
           -- <keyList>
           ex_keyList(
             ex.tags,
-            create_KeyValue('GlobalID', ex.tags ->> 'ref:IFOPT')
+            create_KeyValue('GlobalID', ex.id)
           )
         )
       )
@@ -732,7 +727,7 @@ FROM (
     WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
       xmlagg(
         -- <Entrance>
-        xmlelement(name "Entrance", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
+        xmlelement(name "Entrance", xmlattributes(ex.id AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <Centroid>
@@ -749,7 +744,7 @@ FROM (
     WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
       xmlagg(
         -- <Parking>
-        xmlelement(name "AccessSpace", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
+        xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <Centroid>
@@ -767,7 +762,7 @@ FROM (
     WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
       xmlagg(
         -- <Parking>
-        xmlelement(name "Parking", xmlattributes(ex."IFOPT" AS "id", ex.version AS "version"),
+        xmlelement(name "Parking", xmlattributes(ex.id AS "id", ex.version AS "version"),
           -- <Name>
           ex_Name(ex.tags),
           -- <Centroid>
