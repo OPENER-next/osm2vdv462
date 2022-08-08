@@ -439,9 +439,11 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
 
 /*
  * This function finds all paths between a given list of target nodes.
- * Returns a table of arrays, while each array is a list of node ids.
+ * Returns a table of edges with 3 columns.
+ * Two columns contain the node ids that describe the edge.
+ * The thrid column contains the path id the edge belongs to.
  */
-CREATE OR REPLACE FUNCTION get_paths_connecting_nodes(target_nodes INT[]) RETURNS TABLE (nodes_path INT[]) AS
+CREATE OR REPLACE FUNCTION get_paths_connecting_nodes(target_nodes INT[]) RETURNS TABLE (path_id INT, node_1 INT, node_2 INT) AS
 $$
 DECLARE
     -- holds all target nodes that haven't been used as a starting point yet
@@ -452,6 +454,9 @@ DECLARE
     touching_nodes INT[];
 
     nodes_path INT[];
+
+    loop_count INT;
+    path_counter INT := 0;
 BEGIN
     unvisited_target_nodes := target_nodes;
     -- Loop as long as we have at least two unvisited target nodes
@@ -481,8 +486,11 @@ BEGIN
         nodes_path := array_prepend(current_node, nodes_path);
         -- check whether the current node is any of the unvisited target nodes
         IF current_node = ANY(unvisited_target_nodes) THEN
-          -- return current edge path (note that it is inversed)
-          RETURN QUERY SELECT nodes_path;
+          -- return current path (note that it is inversed)
+          FOR loop_count IN 2 .. array_length(nodes_path, 1) LOOP
+            RETURN QUERY SELECT path_counter, nodes_path[loop_count - 1], nodes_path[loop_count];
+          END LOOP;
+          path_counter := path_counter + 1;
         ELSE
           -- get all nodes that touch the end of the current path
           -- and that are not part of the nodes path (prevents circles)
