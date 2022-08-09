@@ -81,7 +81,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Creates the From and To element based on given ids and version
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_FromTo(a text, b text, c int) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_FromTo(a text, b text, c anyelement) RETURNS xml AS
 $$
 SELECT xmlconcat(
   xmlelement(name "From",
@@ -634,6 +634,193 @@ CREATE OR REPLACE VIEW final_parkings AS (
 );
 
 
+/**************
+ * PATH LINKS *
+ **************/
+
+/*
+ * Combine all stop places in order to find paths/connections between them.
+ */
+CREATE OR REPLACE VIEW relevant_stop_places AS (
+  SELECT qua.relation_id, qua."IFOPT", qua.osm_id AS osm_id, qua.osm_type AS osm_type, qua.geom
+  FROM final_quays qua
+    UNION ALL
+  SELECT ent.relation_id, ent."IFOPT", ent.node_id AS osm_id, 'N' AS osm_type, ent.geom
+  FROM final_entrances ent
+    UNION ALL
+  SELECT acc.relation_id, acc."IFOPT", acc.osm_id AS osm_id, acc.osm_type AS osm_type, acc.geom
+  FROM final_access_spaces acc
+    UNION ALL
+  SELECT par.relation_id, par."IFOPT", par.osm_id AS osm_id, par.osm_type AS osm_type, par.geom
+  FROM final_parkings par
+);
+
+
+/*
+ * Create a table that contains all potentially relevant ways.
+ * This basically filters all ways that are not near/inside a stop area.
+ */
+DROP TABLE IF EXISTS stop_ways CASCADE;
+CREATE TABLE stop_ways AS (
+  SELECT pta.relation_id, highways.*
+  FROM highways
+  JOIN stop_areas_with_padded_hull AS pta
+    ON ST_Intersects(pta.geom, highways.geom)
+);
+
+-- Build way topology --
+
+SELECT topology.DropTopology('ways_topo')
+WHERE EXISTS (
+  SELECT * FROM topology.topology WHERE name = 'ways_topo'
+);
+SELECT topology.CreateTopology('ways_topo', 3857);
+
+SELECT topology.AddTopoGeometryColumn('ways_topo', 'public', 'stop_ways', 'topo_geom', 'LINESTRING');
+
+DO $$DECLARE r record;
+BEGIN
+  FOR r IN SELECT * FROM highways LOOP
+    BEGIN
+      UPDATE stop_ways SET topo_geom = topology.toTopoGeom(geom, 'ways_topo', 1, 1.0) WHERE osm_id = r.osm_id AND osm_type = r.osm_type;
+    EXCEPTION
+      WHEN OTHERS THEN
+        RAISE WARNING 'topology creation for % failed with error: %', r.osm_id, SQLERRM;
+    END;
+  END LOOP;
+END$$;
+
+-- Improve way topology --
+
+-- Replace all assigned stop place nodes with one merged node that gets the centroid of the osm element/stop place as geometry
+-- Without this step we would also get paths between the same element/feature.
+
+DO $$
+DECLARE r record;
+DECLARE new_node_id INT;
+BEGIN
+  FOR r IN
+    -- First get/assign all nodes that belong to the same stop place.
+    WITH tmp_topology_nodes_of_elements AS (
+      SELECT relation_id, array_agg(node_id) AS node_ids, osm_id, osm_type, sp.geom
+      FROM relevant_stop_places sp
+      JOIN ways_topo.node ed
+      ON ST_Touches(sp.geom, ed.geom)
+      GROUP BY relation_id, osm_id, osm_type, sp.geom
+    )
+    SELECT * FROM tmp_topology_nodes_of_elements
+  LOOP
+    -- first add new nodes
+    INSERT INTO ways_topo.node(geom) VALUES (ST_Centroid(r.geom)) RETURNING node_id INTO new_node_id;
+    -- update all edges with previous node id to new node id
+    UPDATE ways_topo.edge_data
+    SET start_node = new_node_id
+    WHERE start_node = ANY(r.node_ids);
+
+    UPDATE ways_topo.edge_data
+    SET end_node = new_node_id
+    WHERE end_node = ANY(r.node_ids);
+    -- remove previous node
+    DELETE FROM ways_topo.node
+    WHERE node_id = ANY(r.node_ids);
+  END LOOP;
+END$$;
+
+--------------------------
+
+/*
+ * Create an assignment table of osm elements to topology node ids
+ * This already includes the stop area relation id.
+ * Temporary table is used to improve performance.
+ */
+DROP TABLE IF EXISTS topology_node_to_osm_element CASCADE;
+CREATE TEMPORARY TABLE topology_node_to_osm_element AS (
+  SELECT sp.*, ed.node_id
+  FROM relevant_stop_places sp
+  JOIN ways_topo.node ed
+  ON ST_Equals(ST_Centroid(sp.geom), ed.geom)
+);
+
+
+/*
+ * Get all connecting paths via get_paths_connecting_nodes()
+ * Assign them to a stop area relation id.
+ * Add nr column so it can be sorted/ordered later, because order might be lost on joins.
+ */
+CREATE OR REPLACE VIEW stop_area_paths AS (
+  SELECT relation_id, path_id, node_1, node_2, row_number() OVER() AS nr
+  FROM (
+    -- first group by / merge all node ids to an array
+    SELECT relation_id, array_agg(node_id) AS node_ids
+    FROM topology_node_to_osm_element
+    GROUP BY relation_id
+    ) tne,
+    -- get connecting paths by passing array of each row
+    LATERAL get_paths_connecting_nodes(tne.node_ids) pa
+);
+
+
+/*
+ * This aggregate function combines all osm element tags that form a path link.
+ * TODO: Currently this only merges the tags together.
+ */
+CREATE OR REPLACE AGGREGATE jsonb_merge_agg(jsonb) (
+  SFUNC = 'jsonb_concat',
+  STYPE = jsonb,
+  INITCOND = '{}'
+);
+
+
+/*
+ * Aggregates all path segments from stop_area_paths to a single path
+ * Aggregate all element ids and types into an MD5 hash to get a deterministic and somewhat unique id
+ * Get start and end point id of the path
+ * Aggregate all tags of the path into one tag map
+ * Create version by summing all versions of the underlying osm elements
+ * Create path geometry from all edge geometries
+ */
+CREATE OR REPLACE VIEW stop_area_paths_agg AS (
+  SELECT relation_id,
+    md5( STRING_AGG(osm_type || osm_id, '' ORDER BY path_id, nr) ) AS path_id,
+    first(node_1), last(node_2),
+    jsonb_merge_agg(tags) AS tags,
+    SUM(version) AS version,
+    ST_LineMerge( ST_Collect(geom) ) AS geom
+  FROM
+  -- use nested select because we first need to order them correctly before grouping
+  (
+    SELECT sap.relation_id, path_id, node_1, node_2, nr, osm_type, osm_id, tags, version, ed.geom
+    FROM stop_area_paths sap
+    -- join edge table to get geometries and edge ids
+    JOIN ways_topo.edge_data AS ed
+      ON (ed.start_node = sap.node_1 AND ed.end_node = sap.node_2)
+      OR (ed.start_node = sap.node_2 AND ed.end_node = sap.node_1)
+    JOIN ways_topo.relation rel
+      ON rel.element_id = ed.edge_id AND rel.element_type = 2
+    JOIN stop_ways ele
+      ON rel.topogeo_id = (ele.topo_geom).id
+    ORDER BY path_id, sap.nr
+  ) t
+  GROUP BY path_id, relation_id
+);
+
+
+/*
+ * Contains all path links by relation id.
+ * This only joins the start and ende DHIDs to the table.
+ */
+CREATE OR REPLACE VIEW final_path_links AS (
+  SELECT paths.relation_id, concat_ws('_', paths.relation_id, path_id) AS id,
+         paths.tags, paths.geom, paths.version,
+         tnoe1."IFOPT" AS "from", tnoe2."IFOPT" AS "to"
+  FROM stop_area_paths_agg paths
+  JOIN topology_node_to_osm_element tnoe1
+    ON tnoe1.node_id = paths.first
+  JOIN topology_node_to_osm_element tnoe2
+    ON tnoe2.node_id = paths.last
+);
+
+
 /**********
  * EXPORT *
  **********/
@@ -651,26 +838,32 @@ CREATE OR REPLACE VIEW export_data AS (
   FROM (
     SELECT
       'QUAY'::category AS category, relation_id,
-      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, qua.version AS version
+      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, qua.version AS version, NULL AS "from", NULL AS "to"
     FROM final_quays qua
     -- Append all Entrances to the table
     UNION ALL
       SELECT
         'ENTRANCE'::category AS category, relation_id,
-        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, ent.version AS version
+        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, ent.version AS version, NULL AS "from", NULL AS "to"
       FROM final_entrances ent
     -- Append all AccessSpaces to the table
     UNION ALL
       SELECT
         'ACCESS_SPACE'::category AS category, relation_id,
-        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc.version AS version
+        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc.version AS version, NULL AS "from", NULL AS "to"
       FROM final_access_spaces acc
     -- Append all Parking Spaces to the table
     UNION ALL
       SELECT
         'PARKING'::category AS category, relation_id,
-        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, par.version AS version
+        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, par.version AS version, NULL AS "from", NULL AS "to"
       FROM final_parkings par
+    -- Append all Path Links to the table
+    UNION ALL
+      SELECT
+        'PATH_LINK'::category AS category, relation_id,
+        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat.version AS version, pat.from AS "from", pat.to AS "to"
+      FROM final_path_links pat
   ) stop_elements
   INNER JOIN stop_areas_with_geom pta
     ON stop_elements.relation_id = pta.relation_id
@@ -782,8 +975,19 @@ FROM (
     ))
     WHEN ex.category = 'PATH_LINK' THEN xmlelement(name "pathLinks", (
       xmlagg(
-        -- ....
-        xmlelement(name "Dummy")
+        -- <PathLink>
+        xmlelement(name "PathLink", xmlattributes(ex.id AS "id", ex.version AS "version"),
+          -- <Distance>
+          ex_Distance(ex.geom),
+          -- <LineString>
+          ex_LineString(ex.geom),
+          -- <From> <To>
+          ex_FromTo(ex.from, ex.to, ex.version),
+          -- <keyList>
+          ex_keyList(
+            ex.tags
+          )
+        )
       )
     ))
   END AS xml_children
