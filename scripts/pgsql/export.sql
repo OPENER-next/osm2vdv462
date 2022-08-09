@@ -538,7 +538,7 @@ LANGUAGE SQL IMMUTABLE;
  * Aggregate member stop geometries to stop areas
  * Split JOINs because GROUP BY doesn't allow grouping by all columns of a specific table
  */
-CREATE OR REPLACE VIEW stop_areas_with_geom AS (
+CREATE OR REPLACE TEMPORARY VIEW stop_areas_with_geom AS (
   WITH
     stops_clustered_by_relation_id AS (
       SELECT ptr.relation_id, ST_Collect(geom) AS geom
@@ -558,7 +558,7 @@ CREATE OR REPLACE VIEW stop_areas_with_geom AS (
  * Create view that contains all stop areas with hull enclosing all stops.
  * The hull is padded by 100 meters
  */
-CREATE OR REPLACE VIEW stop_areas_with_padded_hull AS (
+CREATE OR REPLACE TEMPORARY VIEW stop_areas_with_padded_hull AS (
   SELECT
     relation_id,
     -- Expand the hull geometry
@@ -578,7 +578,7 @@ CREATE OR REPLACE VIEW stop_areas_with_padded_hull AS (
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
-CREATE OR REPLACE VIEW final_quays AS (
+CREATE OR REPLACE TEMPORARY VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*
   FROM stop_areas_members_ref ptr
   INNER JOIN platforms pts
@@ -594,7 +594,7 @@ CREATE OR REPLACE VIEW final_quays AS (
  * Create view that matches all entrances geographically to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every entrance that is contained.
  */
-CREATE OR REPLACE VIEW final_entrances AS (
+CREATE OR REPLACE TEMPORARY VIEW final_entrances AS (
   SELECT pta.relation_id, entrances.*
   FROM entrances
   JOIN stop_areas_with_padded_hull AS pta
@@ -610,7 +610,7 @@ CREATE OR REPLACE VIEW final_entrances AS (
  * Create view that matches all access spaces geographically to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every access space that intersects it.
  */
-CREATE OR REPLACE VIEW final_access_spaces AS (
+CREATE OR REPLACE TEMPORARY VIEW final_access_spaces AS (
   SELECT pta.relation_id, access_spaces.*
   FROM access_spaces
   JOIN stop_areas_with_padded_hull AS pta
@@ -626,7 +626,7 @@ CREATE OR REPLACE VIEW final_access_spaces AS (
  * Create view that matches all parking spaces geographically to public transport areas.
  * This uses the padded hull of stop areas and matches/joins every parking space that intersects it.
  */
-CREATE OR REPLACE VIEW final_parkings AS (
+CREATE OR REPLACE TEMPORARY VIEW final_parkings AS (
   SELECT pta.relation_id, parking.*
   FROM parking
   JOIN stop_areas_with_padded_hull AS pta
@@ -641,7 +641,7 @@ CREATE OR REPLACE VIEW final_parkings AS (
 /*
  * Combine all stop places in order to find paths/connections between them.
  */
-CREATE OR REPLACE VIEW relevant_stop_places AS (
+CREATE OR REPLACE TEMPORARY VIEW relevant_stop_places AS (
   SELECT qua.relation_id, qua."IFOPT", qua.osm_id AS osm_id, qua.osm_type AS osm_type, qua.geom
   FROM final_quays qua
     UNION ALL
@@ -747,7 +747,7 @@ CREATE TEMPORARY TABLE topology_node_to_osm_element AS (
  * Assign them to a stop area relation id.
  * Add nr column so it can be sorted/ordered later, because order might be lost on joins.
  */
-CREATE OR REPLACE VIEW stop_area_paths AS (
+CREATE OR REPLACE TEMPORARY VIEW stop_area_paths AS (
   SELECT relation_id, path_id, node_1, node_2, row_number() OVER() AS nr
   FROM (
     -- first group by / merge all node ids to an array
@@ -779,7 +779,7 @@ CREATE OR REPLACE AGGREGATE jsonb_merge_agg(jsonb) (
  * Create version by summing all versions of the underlying osm elements
  * Create path geometry from all edge geometries
  */
-CREATE OR REPLACE VIEW stop_area_paths_agg AS (
+CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
   SELECT relation_id,
     md5( STRING_AGG(osm_type || osm_id, '' ORDER BY path_id, nr) ) AS path_id,
     first(node_1), last(node_2),
@@ -809,7 +809,7 @@ CREATE OR REPLACE VIEW stop_area_paths_agg AS (
  * Contains all path links by relation id.
  * This only joins the start and ende DHIDs to the table.
  */
-CREATE OR REPLACE VIEW final_path_links AS (
+CREATE OR REPLACE TEMPORARY VIEW final_path_links AS (
   SELECT paths.relation_id, concat_ws('_', paths.relation_id, path_id) AS id,
          paths.tags, paths.geom, paths.version,
          tnoe1."IFOPT" AS "from", tnoe2."IFOPT" AS "to"
@@ -831,7 +831,7 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'PA
 -- Build final export data table
 -- Join all stops to their stop areas
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
-CREATE OR REPLACE VIEW export_data AS (
+CREATE OR REPLACE TEMPORARY VIEW export_data AS (
   SELECT
     pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
     stop_elements.*
