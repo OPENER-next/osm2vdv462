@@ -538,7 +538,7 @@ LANGUAGE SQL IMMUTABLE;
  * Aggregate member stop geometries to stop areas
  * Split JOINs because GROUP BY doesn't allow grouping by all columns of a specific table
  */
-CREATE OR REPLACE TEMPORARY VIEW stop_areas_with_geom AS (
+CREATE OR REPLACE TEMPORARY VIEW final_stop_places AS (
   WITH
     stops_clustered_by_relation_id AS (
       SELECT ptr.relation_id, ST_Collect(geom) AS geom
@@ -567,7 +567,7 @@ CREATE OR REPLACE TEMPORARY VIEW stop_areas_with_padded_hull AS (
       ST_ConvexHull(geom),
       100
     ) AS geom
-  FROM stop_areas_with_geom
+  FROM final_stop_places
 );
 
 
@@ -580,8 +580,8 @@ CREATE OR REPLACE TEMPORARY VIEW stop_areas_with_padded_hull AS (
  */
 CREATE OR REPLACE TEMPORARY VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*
-  FROM stop_areas_members_ref ptr
-  INNER JOIN platforms pts
+  FROM platforms pts
+  JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
 
@@ -591,14 +591,13 @@ CREATE OR REPLACE TEMPORARY VIEW final_quays AS (
  *************/
 
 /*
- * Create view that matches all entrances geographically to public transport areas.
- * This uses the padded hull of stop areas and matches/joins every entrance that is contained.
+ * Create view that matches all entrances to public transport areas by the reference table.
  */
 CREATE OR REPLACE TEMPORARY VIEW final_entrances AS (
-  SELECT pta.relation_id, entrances.*
-  FROM entrances
-  JOIN stop_areas_with_padded_hull AS pta
-    ON ST_Covers(pta.geom, entrances.geom)
+  SELECT ptr.relation_id, ent.*
+  FROM entrances ent
+  JOIN stop_areas_members_ref ptr
+    ON ent.node_id = ptr.member_id AND ptr.osm_type = 'N'
 );
 
 
@@ -607,14 +606,13 @@ CREATE OR REPLACE TEMPORARY VIEW final_entrances AS (
  *****************/
 
 /*
- * Create view that matches all access spaces geographically to public transport areas.
- * This uses the padded hull of stop areas and matches/joins every access space that intersects it.
+ * Create view that matches all access spaces to public transport areas by the reference table.
  */
 CREATE OR REPLACE TEMPORARY VIEW final_access_spaces AS (
-  SELECT pta.relation_id, access_spaces.*
-  FROM access_spaces
-  JOIN stop_areas_with_padded_hull AS pta
-    ON ST_Intersects(pta.geom, access_spaces.geom)
+  SELECT ptr.relation_id, acc.*
+  FROM access_spaces acc
+  JOIN stop_areas_members_ref ptr
+    ON acc.osm_id = ptr.member_id AND acc.osm_type = ptr.osm_type
 );
 
 
@@ -623,14 +621,13 @@ CREATE OR REPLACE TEMPORARY VIEW final_access_spaces AS (
  ************/
 
 /*
- * Create view that matches all parking spaces geographically to public transport areas.
- * This uses the padded hull of stop areas and matches/joins every parking space that intersects it.
+ * Create view that matches all parking spaces to public transport areas by the reference table.
  */
 CREATE OR REPLACE TEMPORARY VIEW final_parkings AS (
-  SELECT pta.relation_id, parking.*
-  FROM parking
-  JOIN stop_areas_with_padded_hull AS pta
-    ON ST_Intersects(parking.geom, pta.geom)
+  SELECT ptr.relation_id, par.*
+  FROM parking par
+  JOIN stop_areas_members_ref ptr
+    ON par.osm_id = ptr.member_id AND par.osm_type = ptr.osm_type
 );
 
 
@@ -865,7 +862,7 @@ CREATE OR REPLACE TEMPORARY VIEW export_data AS (
         pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat.version AS version, pat.from AS "from", pat.to AS "to"
       FROM final_path_links pat
   ) stop_elements
-  INNER JOIN stop_areas_with_geom pta
+  INNER JOIN final_stop_places pta
     ON stop_elements.relation_id = pta.relation_id
   ORDER BY pta.relation_id
 );
