@@ -446,17 +446,18 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION get_paths_connecting_nodes(target_nodes INT[]) RETURNS TABLE (path_id INT, node_1 INT, node_2 INT) AS
 $$
 DECLARE
-    -- holds all target nodes that haven't been used as a starting point yet
-    unvisited_target_nodes INT[];
+  visited_target_nodes INT[];
+  -- holds all target nodes that haven't been used as a starting point yet
+  unvisited_target_nodes INT[];
 
-    current_node INT;
+  current_node INT;
 
-    touching_nodes INT[];
+  touching_nodes INT[];
 
-    nodes_path INT[];
+  nodes_path INT[];
 
-    loop_count INT;
-    path_counter INT := 0;
+  loop_count INT;
+  path_counter INT := 0;
 BEGIN
     unvisited_target_nodes := target_nodes;
     -- Loop as long as we have at least two unvisited target nodes
@@ -465,6 +466,8 @@ BEGIN
     WHILE array_length(unvisited_target_nodes, 1) > 1 LOOP
       -- init nodes path with current target node
       nodes_path := ARRAY[ unvisited_target_nodes[1] ];
+      -- add current target node to visited nodes
+      visited_target_nodes := array_append(visited_target_nodes, unvisited_target_nodes[1]);
       -- remove first element from the array
       unvisited_target_nodes := unvisited_target_nodes[2:];
       -- get all initial touching nodes from the target node
@@ -484,8 +487,13 @@ BEGIN
         touching_nodes[1] := NULL;
         -- add the popped element to the current nodes path
         nodes_path := array_prepend(current_node, nodes_path);
+        -- check whether the current node is any of the already visited target nodes
+        -- this is required to prevent passing over a target node in order to get to another target node
+        IF current_node = ANY(visited_target_nodes) THEN
+          -- go to next touching node instead
+          CONTINUE;
         -- check whether the current node is any of the unvisited target nodes
-        IF current_node = ANY(unvisited_target_nodes) THEN
+        ELSIF current_node = ANY(unvisited_target_nodes) THEN
           -- return current path (note that it is inversed)
           FOR loop_count IN 2 .. array_length(nodes_path, 1) LOOP
             RETURN QUERY SELECT path_counter, nodes_path[loop_count - 1], nodes_path[loop_count];
