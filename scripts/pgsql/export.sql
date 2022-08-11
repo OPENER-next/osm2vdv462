@@ -791,7 +791,7 @@ CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
     first(node_1), last(node_2),
     jsonb_merge_agg(tags) AS tags,
     SUM(version) AS version,
-    ST_LineMerge( ST_Collect(geom) ) AS geom
+    ST_LineMerge( ST_Union(geom) ) AS geom
   FROM
   -- use nested select because we first need to order them correctly before grouping
   (
