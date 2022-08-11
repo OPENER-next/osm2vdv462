@@ -55,13 +55,24 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a LineString element from a line string geometry
+ * Create a LineString element from a line string geometry and its id
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_LineString(a geometry) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_LineString(a geometry, b anyelement) RETURNS xml AS
 $$
 -- see https://postgis.net/docs/ST_AsGML.html
-SELECT xml( ST_AsGML(3, $1, 15, 22, '') );
+SELECT xmlelement(
+  name "LineString",
+  xmlattributes(
+    'http://www.opengis.net/gml/3.2' AS "xmlns",
+    'http://www.opengis.net/gml/3.2' AS "xmlns:n0",
+    concat('LineString_', $2) AS "n0:id"
+  ),
+  (xpath(
+    '//posList',
+    xml( ST_AsGML(3, ST_Transform($1, 4326), 8, 22, '') )
+  ))[1]
+);
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -982,7 +993,7 @@ FROM (
           -- <Distance>
           ex_Distance(ex.geom),
           -- <LineString>
-          ex_LineString(ex.geom),
+          ex_LineString(ex.geom, ex.id),
           -- <From> <To>
           ex_FromTo(ex.from, ex.to, ex.version)
         )
