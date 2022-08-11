@@ -675,16 +675,17 @@ CREATE TABLE stop_ways AS (
 
 -- Build way topology --
 
-SELECT topology.DropTopology('ways_topo')
-WHERE EXISTS (
-  SELECT * FROM topology.topology WHERE name = 'ways_topo'
-);
-SELECT topology.CreateTopology('ways_topo', 3857);
-
-SELECT topology.AddTopoGeometryColumn('ways_topo', 'public', 'stop_ways', 'topo_geom', 'LINESTRING');
-
 DO $$DECLARE r record;
 BEGIN
+  -- perform discards the return value (in costrast to select)
+  PERFORM topology.DropTopology('ways_topo')
+  WHERE EXISTS (
+    SELECT * FROM topology.topology WHERE name = 'ways_topo'
+  );
+  PERFORM topology.CreateTopology('ways_topo', 3857);
+
+  PERFORM topology.AddTopoGeometryColumn('ways_topo', 'public', 'stop_ways', 'topo_geom', 'LINESTRING');
+
   FOR r IN SELECT * FROM highways LOOP
     BEGIN
       UPDATE stop_ways SET topo_geom = topology.toTopoGeom(geom, 'ways_topo', 1, 1.0) WHERE osm_id = r.osm_id AND osm_type = r.osm_type;
