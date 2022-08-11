@@ -798,7 +798,7 @@ CREATE OR REPLACE AGGREGATE jsonb_merge_agg(jsonb) (
  */
 CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
   SELECT relation_id,
-    md5( STRING_AGG(osm_type || osm_id, '' ORDER BY path_id, nr) ) AS path_id,
+    md5( STRING_AGG(osm_type || osm_id, '_' ORDER BY path_id, nr) ) AS path_id,
     first(node_1), last(node_2),
     jsonb_merge_agg(tags) AS tags,
     SUM(version) AS version,
