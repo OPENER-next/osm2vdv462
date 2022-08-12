@@ -928,10 +928,7 @@ SELECT
 -- <StopPlace>
 xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version AS "version"),
   -- <keyList>
-  ex_keyList(
-    ex.area_tags,
-    create_KeyValue('GlobalID', ex.area_dhid)
-  ),
+  ex_keyList(ex.area_tags),
   -- <Name>
   xmlelement(name "Name", ex.area_name),
   -- <ShortName>
@@ -955,10 +952,7 @@ FROM (
         -- <Quay>
         xmlelement(name "Quay", xmlattributes(ex.id AS "id", ex.version AS "version"),
           -- <keyList>
-          ex_keyList(
-            ex.tags,
-            create_KeyValue('GlobalID', ex.id)
-          ),
+          ex_keyList(ex.tags),
           -- <Name>
           ex_Name(ex.tags),
           -- <ShortName>
