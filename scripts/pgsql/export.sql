@@ -709,13 +709,13 @@ END$$;
 
 -- Improve way topology --
 
--- Replace all assigned stop place nodes with one merged node that gets the centroid of the osm element/stop place as geometry
--- Without this step we would also get paths between the same element/feature.
-
 DO $$
 DECLARE r record;
 DECLARE new_node_id INT;
 BEGIN
+
+-- Replace all assigned stop place nodes with one merged node that gets the centroid of the osm element/stop place as geometry
+-- Without this step we would also get paths between the same element/feature.
   FOR r IN
     -- First get/assign all nodes that belong to the same stop place.
     WITH tmp_topology_nodes_of_elements AS (
@@ -741,6 +741,13 @@ BEGIN
     DELETE FROM ways_topo.node
     WHERE node_id = ANY(r.node_ids);
   END LOOP;
+
+  -- Edge topology may not be split at a point like a bus stop.
+  -- This happens when there is no junction or connection to more than one edges.
+  -- Therefore these points wouldn't be reachable, so every stop place of type point is addeed here.
+  PERFORM TopoGeo_AddPoint('ways_topo', geom)
+  FROM relevant_stop_places
+  WHERE ST_GeometryType(geom) = 'ST_Point';
 END$$;
 
 --------------------------
