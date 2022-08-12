@@ -9,6 +9,30 @@ local extract_conditions = {
             false, 'customers', 'yes'
         }
     },
+    {
+        ['highway'] = true,
+        ['sidewalk'] = {
+            'yes', 'left', 'right', 'both'
+        }
+    },
+    {
+        ['highway'] = true,
+        ['sidewalk:left'] = {
+            'yes'
+        }
+    },
+    {
+        ['highway'] = true,
+        ['sidewalk:right'] = {
+            'yes'
+        }
+    },
+    {
+        ['highway'] = true,
+        ['sidewalk:both'] = {
+            'yes'
+        }
+    }
 }
 
 -- Create table that contains all highways
