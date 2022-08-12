@@ -273,7 +273,14 @@ $$
 DECLARE
   result text;
 BEGIN
-  result := COALESCE(tags->>'name', tags->>'name:de', tags->>'official_name', tags->>'description');
+  result := COALESCE(
+    tags->>'name',
+    tags->>'name:de',
+    tags->>'official_name',
+    tags->>'uic_name',
+    tags->>'ref',
+    tags->>'description'
+  );
 
   IF result IS NOT NULL THEN
     RETURN xmlelement(name "Name", result);
