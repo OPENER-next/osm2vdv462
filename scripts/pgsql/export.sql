@@ -325,6 +325,27 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
+ * Create a AuthorityRef element based on operator:short, operator, network:short and network tag
+ * Returns null otherwise
+ */
+CREATE OR REPLACE FUNCTION ex_AuthorityRef(tags jsonb) RETURNS xml AS
+$$
+DECLARE
+  result text;
+BEGIN
+  result := COALESCE(tags->>'operator:short', tags->>'operator', tags->>'network:short', tags->>'network');
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "AuthorityRef", xmlattributes(result AS "ref"));
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
  * Create a EntranceType element based on the tags: door, automatic_door
  * Unused types: "openDoor" | "ticketBarrier" | "gate"
  * If no match is found this will always return a EntranceType of "other"
@@ -914,6 +935,8 @@ xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version
   ex_Description(ex.area_tags),
   -- <Centroid>
   ex_Centroid(area_geom),
+  -- <AuthorityRef>
+  ex_AuthorityRef(ex.area_tags),
   xmlagg(ex.xml_children)
 )
 FROM (
