@@ -813,6 +813,29 @@ CREATE OR REPLACE TEMPORARY VIEW stop_area_paths AS (
 
 
 /*
+ * stop_area_paths ever only returns undirected paths between stop places
+ * Therefore for every path we need to create a respective reversed path
+ */
+CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_bidirectional AS (
+  WITH max_ids (max_path_id, max_nr) AS (
+    SELECT MAX(path_id), MAX(nr)
+    FROM stop_area_paths
+  )
+  SELECT *
+  FROM stop_area_paths
+  UNION ALL
+    SELECT relation_id,
+           -- increase path ids
+           max_path_id + path_id + 1,
+           -- swap start/end nodes
+           sap.node_2, sap.node_1,
+           -- inverse edge order and increase nr
+           max_nr + row_number() OVER( ORDER BY nr DESC )
+    FROM stop_area_paths sap, max_ids
+);
+
+
+/*
  * This aggregate function combines all osm element tags that form a path link.
  * TODO: Currently this only merges the tags together.
  */
@@ -842,7 +865,7 @@ CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
   -- use nested select because we first need to order them correctly before grouping
   (
     SELECT sap.relation_id, path_id, node_1, node_2, nr, osm_type, osm_id, tags, version, ed.geom
-    FROM stop_area_paths sap
+    FROM stop_area_paths_bidirectional sap
     -- join edge table to get geometries and edge ids
     JOIN ways_topo.edge_data AS ed
       ON (ed.start_node = sap.node_1 AND ed.end_node = sap.node_2)
@@ -862,7 +885,12 @@ CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
  * This only joins the start and ende DHIDs to the table.
  */
 CREATE OR REPLACE TEMPORARY VIEW final_site_path_links AS (
-  SELECT paths.relation_id, concat_ws('_', paths.relation_id, path_id) AS id,
+  -- include relation id to prevent collisions
+  -- include from & to DHID in order to prevent collisions between identical paths (normal and inverted)
+  -- that only consist of one way/edge, because they have the same path id
+  -- md5 is required to make the id NeTEx compliant
+  SELECT paths.relation_id,
+         concat_ws('_', paths.relation_id, md5(tnoe1."IFOPT" || tnoe2."IFOPT"), path_id) AS id,
          paths.tags, paths.geom, paths.version,
          tnoe1."IFOPT" AS "from", tnoe2."IFOPT" AS "to"
   FROM stop_area_paths_agg paths
