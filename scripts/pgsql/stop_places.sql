@@ -714,7 +714,7 @@ CREATE TABLE stop_ways AS (
 
 -- Build way topology --
 
-DO $$DECLARE r record;
+DO $$
 BEGIN
   -- perform discards the return value (in costrast to select)
   PERFORM topology.DropTopology('ways_topo')
@@ -728,10 +728,12 @@ BEGIN
   UPDATE stop_ways
   SET topo_geom = topology.toTopoGeom(geom, 'ways_topo', 1)
   -- Filter other geometries because they cannot be converted and would otherwise throw an error
-  WHERE ST_GeometryType(geom) = 'LINESTRING';
-END$$;
+  WHERE ST_GeometryType(geom) = 'ST_LineString';
+END $$;
 
--- Improve way topolo
+-- Improve way topolo --
+
+DO $$
 DECLARE r record;
 DECLARE new_node_id INT;
 BEGIN
@@ -770,7 +772,7 @@ BEGIN
   PERFORM TopoGeo_AddPoint('ways_topo', geom)
   FROM relevant_stop_places
   WHERE ST_GeometryType(geom) = 'ST_Point';
-END$$;
+END $$;
 
 --------------------------
 
@@ -946,114 +948,116 @@ CREATE OR REPLACE TEMPORARY VIEW export_data AS (
 
 -- Final export to XML
 
-SELECT
--- <StopPlace>
-xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version AS "version"),
-  -- <keyList>
-  ex_keyList(ex.area_tags),
-  -- <Name>
-  xmlelement(name "Name", ex.area_name),
-  -- <ShortName>
-  ex_ShortName(ex.area_tags),
-  -- <alternativeNames>
-  ex_alternativeNames(ex.area_tags),
-  -- <Description>
-  ex_Description(ex.area_tags),
-  -- <Centroid>
-  ex_Centroid(area_geom),
-  -- <AuthorityRef>
-  ex_AuthorityRef(ex.area_tags),
-  xmlagg(ex.xml_children)
-)
-FROM (
-  SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version,
-  CASE
-    -- <quays>
-    WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
-      xmlagg(
-        -- <Quay>
-        xmlelement(name "Quay", xmlattributes(ex.id AS "id", ex.version AS "version"),
-          -- <keyList>
-          ex_keyList(ex.tags),
-          -- <Name>
-          ex_Name(ex.tags),
-          -- <ShortName>
-          ex_ShortName(ex.tags),
-          -- <Centroid>
-          ex_Centroid(ex.geom),
-          -- <QuayType>
-          ex_QuayType(ex.tags, ex.geom)
+CREATE OR REPLACE TEMPORARY VIEW xml_StopPlaces AS (
+  SELECT
+  -- <StopPlace>
+  xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version AS "version"),
+    -- <keyList>
+    ex_keyList(ex.area_tags),
+    -- <Name>
+    xmlelement(name "Name", ex.area_name),
+    -- <ShortName>
+    ex_ShortName(ex.area_tags),
+    -- <alternativeNames>
+    ex_alternativeNames(ex.area_tags),
+    -- <Description>
+    ex_Description(ex.area_tags),
+    -- <Centroid>
+    ex_Centroid(area_geom),
+    -- <AuthorityRef>
+    ex_AuthorityRef(ex.area_tags),
+    xmlagg(ex.xml_children)
+  )
+  FROM (
+    SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version,
+    CASE
+      -- <quays>
+      WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
+        xmlagg(
+          -- <Quay>
+          xmlelement(name "Quay", xmlattributes(ex.id AS "id", ex.version AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <ShortName>
+            ex_ShortName(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <QuayType>
+            ex_QuayType(ex.tags, ex.geom)
+          )
         )
-      )
-    ))
-    -- <entrances>
-    WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
-      xmlagg(
-        -- <Entrance>
-        xmlelement(name "Entrance", xmlattributes(ex.id AS "id", ex.version AS "version"),
-          -- <keyList>
-          ex_keyList(ex.tags),
-          -- <Name>
-          ex_Name(ex.tags),
-          -- <Centroid>
-          ex_Centroid(ex.geom),
-          -- <EntranceType>
-          ex_EntranceType(ex.tags)
+      ))
+      -- <entrances>
+      WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
+        xmlagg(
+          -- <Entrance>
+          xmlelement(name "Entrance", xmlattributes(ex.id AS "id", ex.version AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <EntranceType>
+            ex_EntranceType(ex.tags)
+          )
         )
-      )
-    ))
-    WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
-      xmlagg(
-        -- <Parking>
-        xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", ex.version AS "version"),
-          -- <keyList>
-          ex_keyList(ex.tags),
-          -- <Name>
-          ex_Name(ex.tags),
-          -- <Centroid>
-          ex_Centroid(ex.geom),
-          -- <AccessSpaceType>
-          ex_AccessSpaceType(ex.tags)
+      ))
+      WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
+        xmlagg(
+          -- <Parking>
+          xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", ex.version AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <AccessSpaceType>
+            ex_AccessSpaceType(ex.tags)
+          )
         )
-      )
-    ))
-    -- <parkings>
-    WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
-      xmlagg(
-        -- <Parking>
-        xmlelement(name "Parking", xmlattributes(ex.id AS "id", ex.version AS "version"),
-          -- <keyList>
-          ex_keyList(ex.tags),
-          -- <Name>
-          ex_Name(ex.tags),
-          -- <Centroid>
-          ex_Centroid(ex.geom),
-          -- <ParkingType>
-          ex_ParkingType(ex.tags),
-          -- <ParkingLayout>
-          ex_ParkingLayout(ex.tags),
-          -- <TotalCapacity>
-          ex_TotalCapacity(ex.tags)
+      ))
+      -- <parkings>
+      WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
+        xmlagg(
+          -- <Parking>
+          xmlelement(name "Parking", xmlattributes(ex.id AS "id", ex.version AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <ParkingType>
+            ex_ParkingType(ex.tags),
+            -- <ParkingLayout>
+            ex_ParkingLayout(ex.tags),
+            -- <TotalCapacity>
+            ex_TotalCapacity(ex.tags)
+          )
         )
-      )
-    ))
-    WHEN ex.category = 'SITE_PATH_LINK' THEN xmlelement(name "pathLinks", (
-      xmlagg(
-        -- <SitePathLink>
-        xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", ex.version AS "version"),
-          -- <keyList>
-          ex_keyList(ex.tags),
-          -- <Distance>
-          ex_Distance(ex.geom),
-          -- <LineString>
-          ex_LineString(ex.geom, ex.id),
-          -- <From> <To>
-          ex_FromTo(ex.from, ex.to, ex.version)
+      ))
+      WHEN ex.category = 'SITE_PATH_LINK' THEN xmlelement(name "pathLinks", (
+        xmlagg(
+          -- <SitePathLink>
+          xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", ex.version AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Distance>
+            ex_Distance(ex.geom),
+            -- <LineString>
+            ex_LineString(ex.geom, ex.id),
+            -- <From> <To>
+            ex_FromTo(ex.from, ex.to, ex.version)
+          )
         )
-      )
-    ))
-  END AS xml_children
-  FROM export_data ex
-  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version, ex.category
-) AS ex
-GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version
+      ))
+    END AS xml_children
+    FROM export_data ex
+    GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version, ex.category
+  ) AS ex
+  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version
+);
