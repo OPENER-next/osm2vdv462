@@ -41,7 +41,7 @@ local access_spaces_table = osm2pgsql.define_table({
     columns = {
         { column = 'IFOPT', type = 'text', not_null = true },
         { column = 'tags', type = 'jsonb', not_null = true },
-        { column = 'geom', type = 'geometry', not_null = true },
+        { column = 'geom', type = 'geometry', not_null = true, projection = 4326 },
         { column = 'version', type = 'int', not_null = true }
     }
 })

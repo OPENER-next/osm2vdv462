@@ -101,7 +101,7 @@ local tables = {
         columns = {
             { column = 'poi_type', type = 'text' },
             { column = 'tags', type = 'jsonb' },
-            { column = 'geom', type = 'geometry' }
+            { column = 'geom', type = 'geometry', projection = 4326 }
         }
     })
 }

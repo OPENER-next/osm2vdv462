@@ -45,7 +45,7 @@ local highways_table = osm2pgsql.define_table({
     },
     columns = {
         { column = 'tags', type = 'jsonb' },
-        { column = 'geom', type = 'geometry' },
+        { column = 'geom', type = 'geometry', projection = 4326 },
         { column = 'version', type = 'int' }
     }
 })

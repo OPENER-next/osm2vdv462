@@ -721,23 +721,17 @@ BEGIN
   WHERE EXISTS (
     SELECT * FROM topology.topology WHERE name = 'ways_topo'
   );
-  PERFORM topology.CreateTopology('ways_topo', 3857);
+  PERFORM topology.CreateTopology('ways_topo', 4326);
 
   PERFORM topology.AddTopoGeometryColumn('ways_topo', 'public', 'stop_ways', 'topo_geom', 'LINESTRING');
 
-  FOR r IN SELECT * FROM highways LOOP
-    BEGIN
-      UPDATE stop_ways SET topo_geom = topology.toTopoGeom(geom, 'ways_topo', 1, 1.0) WHERE osm_id = r.osm_id AND osm_type = r.osm_type;
-    EXCEPTION
-      WHEN OTHERS THEN
-        RAISE WARNING 'topology creation for % failed with error: %', r.osm_id, SQLERRM;
-    END;
-  END LOOP;
+  UPDATE stop_ways
+  SET topo_geom = topology.toTopoGeom(geom, 'ways_topo', 1)
+  -- Filter other geometries because they cannot be converted and would otherwise throw an error
+  WHERE ST_GeometryType(geom) = 'LINESTRING';
 END$$;
 
--- Improve way topology --
-
-DO $$
+-- Improve way topolo
 DECLARE r record;
 DECLARE new_node_id INT;
 BEGIN
