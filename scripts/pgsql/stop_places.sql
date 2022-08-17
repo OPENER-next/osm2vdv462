@@ -39,15 +39,16 @@ CREATE OR REPLACE AGGREGATE public.last (anyelement) (
  ********************/
 
 /*
- * Create a centroid element from any geometry
+ * Create a centroid element from any geography
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_Centroid(a geometry) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_Centroid(a geography) RETURNS xml AS
 $$
 SELECT xmlelement(name "Centroid",
   xmlelement(name "Location",
-    xmlelement(name "Longitude", ST_X(ST_Transform(ST_Centroid($1), 4326))),
-    xmlelement(name "Latitude", ST_Y(ST_Transform(ST_Centroid($1), 4326)))
+    -- cast to geometry required because ST_X/ST_Y can only handle geometries
+    xmlelement(name "Longitude", ST_X(ST_Centroid($1)::geometry)),
+    xmlelement(name "Latitude", ST_Y(ST_Centroid($1)::geometry))
   )
 )
 $$
@@ -55,10 +56,10 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a LineString element from a line string geometry and its id
+ * Create a LineString element from a line string geography and its id
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_LineString(a geometry, b anyelement) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_LineString(a geography, b anyelement) RETURNS xml AS
 $$
 -- see https://postgis.net/docs/ST_AsGML.html
 SELECT xmlelement(
@@ -70,7 +71,7 @@ SELECT xmlelement(
   ),
   (xpath(
     '//posList',
-    xml( ST_AsGML(3, ST_Transform($1, 4326), 8, 22, '') )
+    xml( ST_AsGML(3, $1, 8, 22, '') )
   ))[1]
 );
 $$
@@ -83,7 +84,9 @@ LANGUAGE SQL IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_Distance(a geometry) RETURNS xml AS
 $$
-SELECT xmlelement(name "Distance", ST_Length($1))
+SELECT xmlelement(name "Distance", ST_Length(
+  ST_Transform($1, current_setting('export.PROJECTION')::int)::geography
+))
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -162,11 +165,11 @@ LANGUAGE plpgsql IMMUTABLE;
 
 /*
  * Create a QuayType element based on the tags: train, subway, tram, coach, bus, monorail and light_rail
- * Note: this function also takes the geometry of the object to distinguish between a tramPlatform and tramStop
+ * Note: this function also takes the geography of the object to distinguish between a tramPlatform and tramStop
  * Unused types: "airlineGate" | "busBay" | "boatQuay" | "ferryLanding" | "telecabinePlatform" | "taxiStand" | "setDownPlace" | "vehicleLoadingPlace"
  * If no match is found this will always return NULL
  */
-CREATE OR REPLACE FUNCTION ex_QuayType(tags jsonb, geom geometry) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_QuayType(tags jsonb, geom geography) RETURNS xml AS
 $$
 DECLARE
   result text;
@@ -279,6 +282,7 @@ BEGIN
     tags->>'official_name',
     tags->>'uic_name',
     tags->>'ref',
+    tags->>'ref:IFOPT:description',
     tags->>'description'
   );
 
@@ -721,7 +725,7 @@ BEGIN
   WHERE EXISTS (
     SELECT * FROM topology.topology WHERE name = 'ways_topo'
   );
-  PERFORM topology.CreateTopology('ways_topo', 4326);
+  PERFORM topology.CreateTopology('ways_topo', current_setting('export.PROJECTION')::int);
 
   PERFORM topology.AddTopoGeometryColumn('ways_topo', 'public', 'stop_ways', 'topo_geom', 'LINESTRING');
 
@@ -897,9 +901,9 @@ CREATE OR REPLACE TEMPORARY VIEW final_site_path_links AS (
 );
 
 
-/**********
- * EXPORT *
- **********/
+/**********************
+ * STOP PLACES EXPORT *
+ **********************/
 
 DROP TYPE IF EXISTS category CASCADE;
 CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
@@ -948,7 +952,7 @@ CREATE OR REPLACE TEMPORARY VIEW export_data AS (
 
 -- Final export to XML
 
-CREATE OR REPLACE TEMPORARY VIEW xml_StopPlaces AS (
+CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
   SELECT
   -- <StopPlace>
   xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version AS "version"),
