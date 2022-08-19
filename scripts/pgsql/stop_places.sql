@@ -911,7 +911,7 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
 CREATE OR REPLACE TEMPORARY VIEW export_data AS (
   SELECT
-    pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
+    pta."IFOPT" AS area_id, pta.tags AS area_tags, pta.geom AS area_geom,
     stop_elements.*
   FROM (
     SELECT
@@ -953,11 +953,11 @@ CREATE OR REPLACE TEMPORARY VIEW export_data AS (
 CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
   SELECT
   -- <StopPlace>
-  xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", 'any' AS "version"),
+  xmlelement(name "StopPlace", xmlattributes(ex.area_id AS "id", 'any' AS "version"),
     -- <keyList>
     ex_keyList(ex.area_tags),
     -- <Name>
-    xmlelement(name "Name", ex.area_name),
+    ex_Name(ex.area_tags),
     -- <ShortName>
     ex_ShortName(ex.area_tags),
     -- <alternativeNames>
@@ -971,7 +971,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
     xmlagg(ex.xml_children)
   )
   FROM (
-    SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom,
+    SELECT ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom,
     CASE
       -- <quays>
       WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
@@ -1059,7 +1059,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
       ))
     END AS xml_children
     FROM export_data ex
-    GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.category
+    GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.category
   ) AS ex
-  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom
+  GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom
 );

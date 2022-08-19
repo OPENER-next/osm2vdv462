@@ -1,25 +1,5 @@
 -- Helper functions
 
-
--- Returns a table that represents a row
-function build_row(object, columns, osm_type)
-    local row = {}
-    set_row_tags_by_columns(row, object, columns)
-    if osm_type ~= nil then
-        set_row_geom_by_type(row, object, osm_type)
-    end
-    row.tags = object.tags
-    return row
-end
-
-
-function set_row_tags_by_columns(row, object, columns)
-    for key, entry in ipairs(columns) do
-        row[entry.column] = object:grab_tag(entry.column)
-    end
-end
-
-
 function set_row_geom_by_type(row, object, osm_type)
     -- define fallback type as area
     row.geom = {create = 'area'}
