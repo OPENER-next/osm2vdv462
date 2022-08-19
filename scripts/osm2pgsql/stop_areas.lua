@@ -5,10 +5,7 @@ require 'utils'
 
 local stop_areas_columns = {
     { column = 'name', type = 'text' },
-    { column = 'ref', type = 'text' },
-    { column = 'ref:IFOPT', type = 'text' },
-    { column = 'operator', type = 'text' },
-    { column = 'version', type = 'int' }
+    { column = 'ref:IFOPT', type = 'text' }
 }
 
 -- Create tables

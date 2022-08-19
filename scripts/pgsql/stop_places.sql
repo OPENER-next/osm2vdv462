@@ -92,17 +92,17 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Creates the From and To element based on given ids and version
+ * Creates the From and To element based on given ids
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_FromTo(a text, b text, c anyelement) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_FromTo(a text, b text) RETURNS xml AS
 $$
 SELECT xmlconcat(
   xmlelement(name "From",
-    xmlelement(name "PlaceRef", xmlattributes($1 AS "ref", $3 AS "version"))
+    xmlelement(name "PlaceRef", xmlattributes($1 AS "ref", 'any' AS "version"))
   ),
   xmlelement(name "To",
-    xmlelement(name "PlaceRef", xmlattributes($2 AS "ref", $3 AS "version"))
+    xmlelement(name "PlaceRef", xmlattributes($2 AS "ref", 'any' AS "version"))
   )
 )
 $$
@@ -851,7 +851,6 @@ CREATE OR REPLACE AGGREGATE jsonb_merge_agg(jsonb) (
  * Aggregate all element ids and types into an MD5 hash to get a deterministic and somewhat unique id
  * Get start and end point id of the path
  * Aggregate all tags of the path into one tag map
- * Create version by summing all versions of the underlying osm elements
  * Create path geometry from all edge geometries
  */
 CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
@@ -859,12 +858,11 @@ CREATE OR REPLACE TEMPORARY VIEW stop_area_paths_agg AS (
     md5( STRING_AGG(osm_type || osm_id, '_' ORDER BY path_id, nr) ) AS path_id,
     first(node_1), last(node_2),
     jsonb_merge_agg(tags) AS tags,
-    SUM(version) AS version,
     ST_LineMerge( ST_Union(geom) ) AS geom
   FROM
   -- use nested select because we first need to order them correctly before grouping
   (
-    SELECT sap.relation_id, path_id, node_1, node_2, nr, osm_type, osm_id, tags, version, ed.geom
+    SELECT sap.relation_id, path_id, node_1, node_2, nr, osm_type, osm_id, tags, ed.geom
     FROM stop_area_paths_bidirectional sap
     -- join edge table to get geometries and edge ids
     JOIN ways_topo.edge_data AS ed
@@ -891,7 +889,7 @@ CREATE OR REPLACE TEMPORARY VIEW final_site_path_links AS (
   -- md5 is required to make the id NeTEx compliant
   SELECT paths.relation_id,
          concat_ws('_', paths.relation_id, md5(tnoe1."IFOPT" || tnoe2."IFOPT"), path_id) AS id,
-         paths.tags, paths.geom, paths.version,
+         paths.tags, paths.geom,
          tnoe1."IFOPT" AS "from", tnoe2."IFOPT" AS "to"
   FROM stop_area_paths_agg paths
   JOIN topology_node_to_osm_element tnoe1
@@ -913,36 +911,36 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
 CREATE OR REPLACE TEMPORARY VIEW export_data AS (
   SELECT
-    pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom, pta.version AS area_version,
+    pta.name AS area_name, pta."ref:IFOPT" AS area_dhid, pta.tags AS area_tags, pta.geom AS area_geom,
     stop_elements.*
   FROM (
     SELECT
       'QUAY'::category AS category, relation_id,
-      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, qua.version AS version, NULL AS "from", NULL AS "to"
+      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, NULL AS "from", NULL AS "to"
     FROM final_quays qua
     -- Append all Entrances to the table
     UNION ALL
       SELECT
         'ENTRANCE'::category AS category, relation_id,
-        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, ent.version AS version, NULL AS "from", NULL AS "to"
+        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, NULL AS "from", NULL AS "to"
       FROM final_entrances ent
     -- Append all AccessSpaces to the table
     UNION ALL
       SELECT
         'ACCESS_SPACE'::category AS category, relation_id,
-        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc.version AS version, NULL AS "from", NULL AS "to"
+        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, NULL AS "from", NULL AS "to"
       FROM final_access_spaces acc
     -- Append all Parking Spaces to the table
     UNION ALL
       SELECT
         'PARKING'::category AS category, relation_id,
-        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, par.version AS version, NULL AS "from", NULL AS "to"
+        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, NULL AS "from", NULL AS "to"
       FROM final_parkings par
     -- Append all Path Links to the table
     UNION ALL
       SELECT
         'SITE_PATH_LINK'::category AS category, relation_id,
-        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat.version AS version, pat.from AS "from", pat.to AS "to"
+        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat.from AS "from", pat.to AS "to"
       FROM final_site_path_links pat
   ) stop_elements
   INNER JOIN final_stop_places pta
@@ -955,7 +953,7 @@ CREATE OR REPLACE TEMPORARY VIEW export_data AS (
 CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
   SELECT
   -- <StopPlace>
-  xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", ex.area_version AS "version"),
+  xmlelement(name "StopPlace", xmlattributes(ex.area_dhid AS "id", 'any' AS "version"),
     -- <keyList>
     ex_keyList(ex.area_tags),
     -- <Name>
@@ -973,13 +971,13 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
     xmlagg(ex.xml_children)
   )
   FROM (
-    SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version,
+    SELECT ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom,
     CASE
       -- <quays>
       WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
         xmlagg(
           -- <Quay>
-          xmlelement(name "Quay", xmlattributes(ex.id AS "id", ex.version AS "version"),
+          xmlelement(name "Quay", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
             ex_keyList(ex.tags),
             -- <Name>
@@ -997,7 +995,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
       WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
         xmlagg(
           -- <Entrance>
-          xmlelement(name "Entrance", xmlattributes(ex.id AS "id", ex.version AS "version"),
+          xmlelement(name "Entrance", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
             ex_keyList(ex.tags),
             -- <Name>
@@ -1012,7 +1010,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
       WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
         xmlagg(
           -- <Parking>
-          xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", ex.version AS "version"),
+          xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
             ex_keyList(ex.tags),
             -- <Name>
@@ -1028,7 +1026,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
       WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
         xmlagg(
           -- <Parking>
-          xmlelement(name "Parking", xmlattributes(ex.id AS "id", ex.version AS "version"),
+          xmlelement(name "Parking", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
             ex_keyList(ex.tags),
             -- <Name>
@@ -1047,7 +1045,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
       WHEN ex.category = 'SITE_PATH_LINK' THEN xmlelement(name "pathLinks", (
         xmlagg(
           -- <SitePathLink>
-          xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", ex.version AS "version"),
+          xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
             ex_keyList(ex.tags),
             -- <Distance>
@@ -1055,13 +1053,13 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
             -- <LineString>
             ex_LineString(ex.geom, ex.id),
             -- <From> <To>
-            ex_FromTo(ex.from, ex.to, ex.version)
+            ex_FromTo(ex.from, ex.to)
           )
         )
       ))
     END AS xml_children
     FROM export_data ex
-    GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version, ex.category
+    GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.category
   ) AS ex
-  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom, ex.area_version
+  GROUP BY ex.relation_id, ex.area_dhid, ex.area_name, ex.area_tags, ex.area_geom
 );

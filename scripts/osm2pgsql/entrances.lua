@@ -17,8 +17,7 @@ local extract_conditions = {
 local entrances_table = osm2pgsql.define_node_table("entrances", {
     { column = 'IFOPT', type = 'text', not_null = true },
     { column = 'tags', type = 'jsonb', not_null = true },
-    { column = 'geom', type = 'point', not_null = true, projection = 4326 },
-    { column = 'version', type = 'int', not_null = true }
+    { column = 'geom', type = 'point', not_null = true, projection = 4326 }
 })
 
 

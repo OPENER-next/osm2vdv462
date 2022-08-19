@@ -9,7 +9,6 @@ function build_row(object, columns, osm_type)
         set_row_geom_by_type(row, object, osm_type)
     end
     row.tags = object.tags
-    row.version = object.version
     return row
 end
 
@@ -83,7 +82,7 @@ function has_area_tags(tags)
 end
 
 
--- Meta function to extract geometry, tags and version by conditions into a given table
+-- Meta function to extract geometry and tags by conditions into a given table
 -- If the table contains a column named "IFOPT" then this function will only extract elements with the tag "ref:IFOPT"
 -- The value will be put into the "IFOPT" column
 function extract_by_conditions_to_table(object, osm_type, extract_conditions, table)
@@ -95,7 +94,7 @@ function extract_by_conditions_to_table(object, osm_type, extract_conditions, ta
     local is_matching = matches(object.tags, extract_conditions)
     if is_matching then
         local row = {
-            version = object.version
+            tags = object.tags
         }
         if wants_IFOPT then
             row.IFOPT = object:grab_tag('ref:IFOPT')
