@@ -98,7 +98,7 @@ echo "Imported operator list into the database."
 read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT
 # Import osm data file
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
-  read -p "Enter the OSM file that should be imported: " IMPORT_FILE
+  read -p "Enter the OSM file(s) that should be imported: " IMPORT_FILE
   # Run osm2pgsql import scripts
   osm2pgsql \
     --host "localhost" \
