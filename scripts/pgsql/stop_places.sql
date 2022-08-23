@@ -336,24 +336,17 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a AuthorityRef element based on operator:short, operator, network:short and network tag
- * Returns null otherwise
+ * Create a AuthorityRef element based on the given id.
+ * Returns null if no id is provided
  */
-CREATE OR REPLACE FUNCTION ex_AuthorityRef(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_AuthorityRef(id text) RETURNS xml AS
 $$
-DECLARE
-  result text;
-BEGIN
-  result := COALESCE(tags->>'operator:short', tags->>'operator', tags->>'network:short', tags->>'network');
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "AuthorityRef", xmlattributes(result AS "ref"));
-  END IF;
-
-  RETURN NULL;
-END
+  SELECT xmlelement(
+    name "AuthorityRef",
+    xmlattributes($1 AS "ref", 'any' AS "version")
+  );
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
@@ -584,6 +577,38 @@ LANGUAGE SQL IMMUTABLE;
  ***************/
 
 /*
+ * Create view that contains all stop areas with the wikidata id of their respective operator and network.
+ * Ids will be NULL if no matching operator/newtwork can be found.
+ */
+CREATE OR REPLACE TEMPORARY VIEW stop_places_with_organisations AS (
+  SELECT stop_areas.*, op.id AS operator_id, net.id AS network_id
+  FROM stop_areas
+  LEFT JOIN organisations op
+  ON
+    tags->>'operator:wikidata' = op.id OR
+    -- ensure that if an wikidata id is present it will not be matched by name
+    tags->>'operator:wikidata' IS NULL AND (
+      tags->>'operator' = op.label OR
+      tags->>'operator' = official_name OR
+      tags->>'operator' = ANY (string_to_array(op.alternatives, ', ')) OR
+      tags->>'operator:short' = op.short_name OR
+      tags->>'operator:short' = ANY (string_to_array(op.alternatives, ', '))
+    )
+  LEFT JOIN organisations net
+  ON
+    tags->>'network:wikidata' = net.id OR
+    -- ensure that if an wikidata id is present it will not be matched by name
+    tags->>'network:wikidata' IS NULL AND (
+      tags->>'network' = net.label OR
+      tags->>'network' = net.official_name OR
+      tags->>'network' = ANY (string_to_array(net.alternatives, ', ')) OR
+      tags->>'network:short' = net.short_name OR
+      tags->>'network:short' = ANY (string_to_array(net.alternatives, ', '))
+    )
+);
+
+
+/*
  * Create view that contains all stop areas with a geometry column derived from their members
  *
  * Aggregate member stop geometries to stop areas
@@ -599,7 +624,7 @@ CREATE OR REPLACE TEMPORARY VIEW final_stop_places AS (
       GROUP BY ptr.relation_id
     )
   SELECT pta.*, geom
-  FROM stop_areas pta
+  FROM stop_places_with_organisations pta
   INNER JOIN stops_clustered_by_relation_id sc
     ON pta.relation_id = sc.relation_id
 );
@@ -911,7 +936,7 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
 CREATE OR REPLACE TEMPORARY VIEW export_data AS (
   SELECT
-    pta."IFOPT" AS area_id, pta.tags AS area_tags, pta.geom AS area_geom,
+    pta."IFOPT" AS area_id, pta.tags AS area_tags, pta.geom AS area_geom, pta.operator_id, pta.network_id,
     stop_elements.*
   FROM (
     SELECT
@@ -967,11 +992,11 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
     -- <Centroid>
     ex_Centroid(area_geom),
     -- <AuthorityRef>
-    ex_AuthorityRef(ex.area_tags),
+    ex_AuthorityRef(ex.network_id),
     xmlagg(ex.xml_children)
   )
   FROM (
-    SELECT ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom,
+    SELECT ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id,
     CASE
       -- <quays>
       WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
@@ -1059,7 +1084,7 @@ CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
       ))
     END AS xml_children
     FROM export_data ex
-    GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.category
+    GROUP BY ex.category, ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id
   ) AS ex
-  GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom
+  GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id
 );
