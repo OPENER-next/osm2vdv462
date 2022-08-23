@@ -21,9 +21,6 @@ SELECT xmlroot(
         ),
         xmlelement(name "frames",
           xmlelement(name "SiteFrame", xmlattributes('SiteFrame_1' AS "id", 'any' AS "version"),
-            xmlelement(name "topographicPlaces",
-              ( SELECT xmlagg(xmlelement) FROM xml_topographicPlaces )
-            ),
             xmlelement(name "stopPlaces",
               ( SELECT xmlagg(xmlelement) FROM xml_stopPlaces )
             )
