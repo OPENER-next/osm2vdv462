@@ -1,0 +1,33 @@
+SELECT
+  (strafter(str(?item), "http://www.wikidata.org/entity/") as ?id)
+  ?itemLabel
+  ?itemAltLabel
+  ?officialName
+  ?shortName
+  ?website
+  (strafter(str(?email), "mailto:") as ?mail)
+  ?phone
+  ?address
+  ?type
+
+WHERE {
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "de". }
+  {
+    ?item wdt:P17 wd:Q183. # lies in Germany
+    ?item wdt:P31 wd:Q7835189. # transit district
+    BIND("authority" AS ?type)
+  }
+  UNION
+  {
+    ?item wdt:P17 wd:Q183. # lies in Germany
+    ?item wdt:P31 wd:Q740752. # transport company
+    BIND("operator" AS ?type)
+  }
+
+  OPTIONAL { ?item wdt:P1448 ?officialName. }
+  OPTIONAL { ?item wdt:P1813 ?shortName. }
+  OPTIONAL { ?item wdt:P856 ?website. }
+  OPTIONAL { ?item wdt:P968 ?email. }
+  OPTIONAL { ?item wdt:P1329 ?phone. }
+  OPTIONAL { ?item wdt:P6375 ?address. }
+}

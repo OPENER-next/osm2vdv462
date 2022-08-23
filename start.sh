@@ -58,6 +58,43 @@ if [ "$USE_PGADMIN4" = "y" ] || [ "$USE_PGADMIN4" = "Y" ]; then
 fi
 
 
+echo "Download latest public transport operator list from Wikidata:"
+csv=$(
+  curl 'https://query.wikidata.org/sparql' \
+    --data-urlencode query@"$(pwd)/scripts/wikidata_query.rq" \
+    --header 'Accept: text/csv' \
+    --progress-bar
+)
+
+docker exec -i osm2vdv462_postgis psql \
+  -U $PGUSER \
+  -d $PGDATABASE \
+  -q \
+  -c "
+    DROP TABLE IF EXISTS organisations CASCADE;
+    CREATE TABLE organisations (
+      id varchar(255) NOT NULL,
+      label Text NOT NULL,
+      alternatives Text,
+      official_name Text,
+      short_name varchar(255),
+      website varchar(255),
+      email varchar(255),
+      phone varchar(255),
+      address Text,
+      type varchar(255)
+    );
+  "
+
+docker exec -i osm2vdv462_postgis psql \
+  -U $PGUSER \
+  -d $PGDATABASE \
+  -q \
+  -c "COPY organisations FROM STDIN DELIMITER ',' CSV HEADER;" <<< "$csv"
+
+echo "Imported operator list into the database."
+
+
 read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT
 # Import osm data file
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
