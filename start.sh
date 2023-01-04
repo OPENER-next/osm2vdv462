@@ -120,7 +120,6 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
     ./scripts/pgsql/setup.sql \
     ./scripts/pgsql/stop_places.sql \
     ./scripts/pgsql/organisations.sql \
-    ./scripts/pgsql/topographic_places.sql \
     ./scripts/pgsql/export.sql \
   | docker exec -i osm2vdv462_postgis \
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction \
