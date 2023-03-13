@@ -119,11 +119,20 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
   cat \
     ./scripts/pgsql/setup.sql \
     ./scripts/pgsql/stop_places.sql \
+  | docker exec -i osm2vdv462_postgis \
+    psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction
+  
+  python3 scripts/ppr.py
+
+  cat \
+    ./scripts/pgsql/setup.sql \
+    ./scripts/pgsql/stop_places_2.sql \
     ./scripts/pgsql/organisations.sql \
     ./scripts/pgsql/export.sql \
   | docker exec -i osm2vdv462_postgis \
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction \
   > $EXPORT_FILE
+
   echo "Done. Export has been saved to $(pwd)/$EXPORT_FILE"
 fi
 
