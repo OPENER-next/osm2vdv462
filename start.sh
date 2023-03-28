@@ -27,7 +27,7 @@ if [ ! "$(docker-compose ps -q)" ]; then
   fi
   
   echo "Waiting for PPR to load the routing graph ..."
-  MAX_RETRIES=10
+  MAX_RETRIES=20
   RETRY_DELAY=10
   # loop until the maximum number of retries is reached
   for i in $(seq 1 $MAX_RETRIES); do
@@ -42,7 +42,7 @@ if [ ! "$(docker-compose ps -q)" ]; then
       else
           # wait for the retry delay before checking again
           sleep $RETRY_DELAY
-          echo -n "."
+          printf "."
       fi
   done
 
@@ -129,7 +129,7 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction
 
   # Start python ppr docker
-  echo -n  "Executing osm2vdv462_python: "
+  echo "Executing osm2vdv462_python: "
   docker exec osm2vdv462_python python3 ppr.py
 
   cat \
