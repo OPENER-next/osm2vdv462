@@ -12,18 +12,6 @@ export DOCKER_NETWORK="osm2vdv462_net"
 
 EXPORT_FILE="export.xml"
 
-# Check if port PGPORT (postgresql) is already in use
-# If so, kill it
-if lsof -Pi :$PGPORT -sTCP:LISTEN -t >/dev/null ; then
-    echo "Port $PGPORT is already in use. The process has to be stopped ... continue?"
-    if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
-      sudo kill -9 $(sudo lsof -t -i:$port)
-    else
-      echo "Aborting."
-      exit
-    fi
-fi
-
 # Optionally install and run pgadmin for easier database management
 read -p "Do you want to use pgadmin4? (y/n) " USE_PGADMIN4
 
@@ -45,7 +33,6 @@ if [ ! "$(docker-compose ps -q)" ]; then
   for i in $(seq 1 $MAX_RETRIES); do
       # check the health of the container using curl command
       HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9042)
-      echo "$HEALTH"
 
       # check the status code returned by curl
       if [ "$HEALTH" -eq "200" ]; then
@@ -55,7 +42,7 @@ if [ ! "$(docker-compose ps -q)" ]; then
       else
           # wait for the retry delay before checking again
           sleep $RETRY_DELAY
-          echo "Waiting ..."
+          echo -n "."
       fi
   done
 
