@@ -1,6 +1,7 @@
 import psycopg2
 import requests
 import json
+import os
 
 def insertSteps(cur, path, path_counter, path_counter_individual, relation_id):
     for step in path:
@@ -30,7 +31,7 @@ def insertOSMWayIDs(cur, edges, path_counter):
 def main():
     # Connect to PostgreSQL database
     conn = psycopg2.connect(
-        host = "localhost",
+        host = os.environ['host_postgis'],
         port = "5432",
         database = "osm2vdv462",
         user = "admin",
@@ -40,7 +41,7 @@ def main():
     # Open a cursor to perform database operations
     cur = conn.cursor()
 
-    url = 'http://0.0.0.0:9042/api/route'
+    url = 'http://' + os.environ['host_ppr'] + ':8000/api/route'
     payload = {
         "start": {
         },

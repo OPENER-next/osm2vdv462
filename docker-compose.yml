@@ -1,0 +1,70 @@
+# Create a network to use the Postgis-Server in another container.
+# Networks are used to connect containers and allow them to communicate.
+networks:
+  osm2vdv462_net:
+    name: ${DOCKER_NETWORK}
+
+# Create docker volume which is a storage point located outside of containers.
+# This is required to persistently store the database between docker restarts.
+volumes:
+  osm2vdv462_postgis:
+
+services:
+  osm2vdv462_postgis:
+    image: postgis/postgis:14-master
+    container_name: osm2vdv462_postgis
+    restart: unless-stopped
+    networks:
+      - ${DOCKER_NETWORK}
+    ports:
+      - "${PGPORT}:5432"
+    volumes:
+      - "osm2vdv462_postgis:/var/lib/postgresql/data"
+    environment:
+      POSTGRES_DB: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      PG_PRIMARY_PORT: ${PGPORT}
+    hostname: osm2vdv462_postgis
+
+  osm2vdv462_ppr:
+    build: ppr/
+    image: ghcr.io/motis-project/ppr:edge
+    ports:
+      - "9042:8000"
+    volumes:
+      - "${PWD}/ppr/data:/data"
+    networks:
+      - ${DOCKER_NETWORK}
+    restart: unless-stopped
+    command: "/ppr/ppr-backend -c /data/config.ini"
+    container_name: osm2vdv462_ppr
+
+  osm2vdv462_python:
+    build: .
+    image: osm2vdv462_python
+    container_name: osm2vdv462_python
+    environment:
+      host_postgis: osm2vdv462_postgis
+      host_ppr: osm2vdv462_ppr
+    stdin_open: true
+    tty: true
+    networks:
+      - ${DOCKER_NETWORK}
+    hostname: osm2vdv462_python
+
+  osm2vdv462_pgadmin4:
+    image: dpage/pgadmin4
+    ports:
+      - "80:80"
+    container_name: osm2vdv462_pgadmin4
+    volumes:
+      - "${PWD}/config/pgadmin_servers.json:/pgadmin4/servers.json"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PG_ADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PG_ADMIN_PASSWORD}
+    networks:
+      - ${DOCKER_NETWORK}
+    hostname: osm2vdv462_pgadmin4
+    profiles:
+      - pgadmin4
