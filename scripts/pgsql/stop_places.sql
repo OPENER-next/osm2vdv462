@@ -1,39 +1,3 @@
-/*********************
- * UTILITY FUNCTIONS *
- *********************/
-
-/*
- * Aggregate functions for getting the first or last value
- * Below functions are taken from: https://wiki.postgresql.org/wiki/First/last_(aggregate)
- */
-
--- Create a function that always returns the first non-NULL value:
-CREATE OR REPLACE FUNCTION public.first_agg (anyelement, anyelement)
-  RETURNS anyelement
-  LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS
-'SELECT $1';
-
--- Then wrap an aggregate around it:
-CREATE OR REPLACE AGGREGATE public.first (anyelement) (
-  SFUNC    = public.first_agg
-, STYPE    = anyelement
-, PARALLEL = safe
-);
-
--- Create a function that always returns the last non-NULL value:
-CREATE OR REPLACE FUNCTION public.last_agg (anyelement, anyelement)
-  RETURNS anyelement
-  LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS
-'SELECT $2';
-
--- Then wrap an aggregate around it:
-CREATE OR REPLACE AGGREGATE public.last (anyelement) (
-  SFUNC    = public.last_agg
-, STYPE    = anyelement
-, PARALLEL = safe
-);
-
-
 /********************
  * EXPORT FUNCTIONS *
  ********************/
@@ -468,13 +432,14 @@ END
 $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
+
 /***************
  * STOP_PLACES *
  ***************/
 
 /*
  * Create view that contains all stop areas with the wikidata id of their respective operator and network.
- * Ids will be NULL if no matching operator/newtwork can be found.
+ * Ids will be NULL if no matching operator/network can be found.
  */
 CREATE OR REPLACE TEMPORARY VIEW stop_places_with_organisations AS (
   SELECT stop_areas.*, op.id AS operator_id, net.id AS network_id
@@ -527,23 +492,6 @@ CREATE TABLE final_stop_places AS (
 );
 
 
-/*
- * Create view that contains all stop areas with hull enclosing all stops.
- * The hull is padded by 100 meters
- */
-CREATE OR REPLACE VIEW stop_areas_with_padded_hull AS (
-  SELECT
-    relation_id,
-    -- Expand the hull geometry
-    ST_Buffer(
-      -- Create a single hull geometry based on the collection
-      ST_ConvexHull(geom),
-      100
-    ) AS geom
-  FROM final_stop_places
-);
-
-
 /*********
  * QUAYS *
  *********/
@@ -551,7 +499,7 @@ CREATE OR REPLACE VIEW stop_areas_with_padded_hull AS (
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
-CREATE OR REPLACE VIEW final_quays AS (
+CREATE OR REPLACE TEMPORARY VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*
   FROM platforms pts
   JOIN stop_areas_members_ref ptr
@@ -566,7 +514,7 @@ CREATE OR REPLACE VIEW final_quays AS (
 /*
  * Create view that matches all entrances to public transport areas by the reference table.
  */
-CREATE OR REPLACE VIEW final_entrances AS (
+CREATE OR REPLACE TEMPORARY VIEW final_entrances AS (
   SELECT ptr.relation_id, ent.*
   FROM entrances ent
   JOIN stop_areas_members_ref ptr
@@ -581,7 +529,7 @@ CREATE OR REPLACE VIEW final_entrances AS (
 /*
  * Create view that matches all access spaces to public transport areas by the reference table.
  */
-CREATE OR REPLACE VIEW final_access_spaces AS (
+CREATE OR REPLACE TEMPORARY VIEW final_access_spaces AS (
   SELECT ptr.relation_id, acc.*
   FROM access_spaces acc
   JOIN stop_areas_members_ref ptr
@@ -596,7 +544,7 @@ CREATE OR REPLACE VIEW final_access_spaces AS (
 /*
  * Create view that matches all parking spaces to public transport areas by the reference table.
  */
-CREATE OR REPLACE VIEW final_parkings AS (
+CREATE OR REPLACE TEMPORARY VIEW final_parkings AS (
   SELECT ptr.relation_id, par.*
   FROM parking par
   JOIN stop_areas_members_ref ptr
@@ -608,118 +556,246 @@ CREATE OR REPLACE VIEW final_parkings AS (
  * PATH LINKS *
  **************/
 
+DROP TYPE IF EXISTS category CASCADE;
+CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
+
 /*
- * Combine all stop places in order to find paths/connections between them.
+ * Mapping of stop places to elements
+ * Create view that matches all elements to corresponding public transport areas.
+ * This table is used in the "routing" step of the pipeline.
  */
-CREATE OR REPLACE TEMPORARY VIEW relevant_stop_places AS (
-  SELECT qua.relation_id, qua."IFOPT", qua.osm_id AS osm_id, qua.osm_type AS osm_type, qua.geom
-  FROM final_quays qua
+CREATE OR REPLACE TEMPORARY VIEW stop_area_elements AS (
+  SELECT
+    stop_elements.*
+  FROM (
+    SELECT
+      relation_id AS stop_area_osm_id, 'QUAY'::category AS category,
+      qua."IFOPT" AS "id",  ST_Centroid(qua.geom) AS geom
+    FROM final_quays qua
+    -- Append all Entrances to the table
     UNION ALL
-  SELECT ent.relation_id, ent."IFOPT", ent.node_id AS osm_id, 'N' AS osm_type, ent.geom
-  FROM final_entrances ent
+      SELECT
+        relation_id AS stop_area_osm_id, 'ENTRANCE'::category AS category,
+        ent."IFOPT" AS "id", ST_Centroid(ent.geom) AS geom
+      FROM final_entrances ent
+    -- Append all AccessSpaces to the table
     UNION ALL
-  SELECT acc.relation_id, acc."IFOPT", acc.osm_id AS osm_id, acc.osm_type AS osm_type, acc.geom
-  FROM final_access_spaces acc
+      SELECT
+        relation_id AS stop_area_osm_id, 'ACCESS_SPACE'::category AS category,
+        acc."IFOPT" AS "id", ST_Centroid(acc.geom) AS geom
+      FROM final_access_spaces acc
+    -- Append all Parking Spaces to the table
     UNION ALL
-  SELECT par.relation_id, par."IFOPT", par.osm_id AS osm_id, par.osm_type AS osm_type, par.geom
-  FROM final_parkings par
+      SELECT
+        relation_id AS stop_area_osm_id, 'PARKING'::category AS category,
+        par."IFOPT" AS "id", ST_Centroid(par.geom) AS geom
+      FROM final_parkings par
+  ) stop_elements
+  INNER JOIN final_stop_places pta
+    ON stop_elements.stop_area_osm_id = pta.relation_id
+  ORDER BY pta.relation_id
 );
 
 
 /*
- * Create a table that contains all potentially relevant ways.
- * This basically filters all ways that are not near/inside a stop area.
+ * Contains all paths between stop place elements
+ * This table will be filled in the "routing" step of the pipeline.
  */
-DROP TABLE IF EXISTS stop_ways CASCADE;
-CREATE TABLE stop_ways AS (
-  SELECT pta.relation_id, highways.*
-  FROM highways
-  JOIN stop_areas_with_padded_hull AS pta
-    ON ST_Intersects(pta.geom, highways.geom)
-);
-
--- Build way topology --
-
-DO $$
-BEGIN
-  -- perform discards the return value (in costrast to select)
-  PERFORM topology.DropTopology('ways_topo')
-  WHERE EXISTS (
-    SELECT * FROM topology.topology WHERE name = 'ways_topo'
-  );
-  PERFORM topology.CreateTopology('ways_topo', current_setting('export.PROJECTION')::int);
-
-  PERFORM topology.AddTopoGeometryColumn('ways_topo', 'public', 'stop_ways', 'topo_geom', 'LINESTRING');
-
-  UPDATE stop_ways
-  SET topo_geom = topology.toTopoGeom(geom, 'ways_topo', 1)
-  -- Filter other geometries because they cannot be converted and would otherwise throw an error
-  WHERE ST_GeometryType(geom) = 'ST_LineString';
-END $$;
-
--- Improve way topolo --
-
-DO $$
-DECLARE r record;
-DECLARE new_node_id INT;
-BEGIN
-
--- Replace all assigned stop place nodes with one merged node that gets the centroid of the osm element/stop place as geometry
--- Without this step we would also get paths between the same element/feature.
-  FOR r IN
-    -- First get/assign all nodes that belong to the same stop place.
-    WITH tmp_topology_nodes_of_elements AS (
-      SELECT relation_id, array_agg(node_id) AS node_ids, osm_id, osm_type, sp.geom
-      FROM relevant_stop_places sp
-      JOIN ways_topo.node ed
-      ON ST_Touches(sp.geom, ed.geom)
-      GROUP BY relation_id, osm_id, osm_type, sp.geom
-    )
-    SELECT * FROM tmp_topology_nodes_of_elements
-  LOOP
-    -- first add new nodes
-    INSERT INTO ways_topo.node(geom) VALUES (ST_Centroid(r.geom)) RETURNING node_id INTO new_node_id;
-    -- update all edges with previous node id to new node id
-    UPDATE ways_topo.edge_data
-    SET start_node = new_node_id
-    WHERE start_node = ANY(r.node_ids);
-
-    UPDATE ways_topo.edge_data
-    SET end_node = new_node_id
-    WHERE end_node = ANY(r.node_ids);
-    -- remove previous node
-    DELETE FROM ways_topo.node
-    WHERE node_id = ANY(r.node_ids);
-  END LOOP;
-
-  -- Edge topology may not be split at a point like a bus stop.
-  -- This happens when there is no junction or connection to more than one edges.
-  -- Therefore these points wouldn't be reachable, so every stop place of type point is addeed here.
-  PERFORM TopoGeo_AddPoint('ways_topo', geom)
-  FROM relevant_stop_places
-  WHERE ST_GeometryType(geom) = 'ST_Point';
-END $$;
-
-
-/*
- * Create an assignment table of osm elements to topology node ids
- * This already includes the stop area relation id.
- */
-DROP TABLE IF EXISTS topology_node_to_osm_element CASCADE;
-CREATE TABLE topology_node_to_osm_element AS (
-  SELECT sp.*, ed.node_id
-  FROM relevant_stop_places sp
-  JOIN ways_topo.node ed
-  ON ST_Equals(ST_Centroid(sp.geom), ed.geom)
+DROP TABLE IF EXISTS paths CASCADE;
+CREATE TABLE paths (
+  id SERIAL PRIMARY KEY,
+  stop_area_relation_id INT,
+  "from" TEXT,
+  "to" TEXT,
+  geom GEOMETRY
 );
 
 
 /*
- * This aggregate function combines all osm element tags that form a path link.
- * TODO: Currently this only merges the tags together.
+ * Reference table for paths to osm elements (id and type)
+ * A path is likely composed of multiple OSM elements and an OSM element can be used in multiple paths.
+ * This table wil be filled in the "routing" step of the pipeline.
  */
-CREATE OR REPLACE AGGREGATE jsonb_merge_agg(jsonb) (
-  SFUNC = 'jsonb_concat',
-  STYPE = jsonb,
-  INITCOND = '{}'
+DROP TABLE IF EXISTS paths_elements_ref CASCADE;
+CREATE TABLE paths_elements_ref (
+  path_id INT,
+  osm_type CHAR(1),
+  osm_id INT
+);
+
+
+/*
+ * Final site pat link view
+ * Currently this is just a wrapper of the "paths" table.
+ * TODO: JOIN "paths" with "paths_elements_ref" and "highways" GROUP BY "path_id" and somehow aggregate tags
+ */
+CREATE OR REPLACE TEMPORARY VIEW final_site_path_links AS (
+  SELECT stop_area_relation_id AS relation_id, id::text, '{}'::jsonb AS tags, geom, "from", "to"
+  FROM paths
+);
+
+
+/**********************
+ * STOP PLACES EXPORT *
+ **********************/
+
+DROP TYPE IF EXISTS category CASCADE;
+CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
+
+-- Build final export data table
+-- Join all stops to their stop areas
+-- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
+CREATE OR REPLACE TEMPORARY VIEW export_data AS (
+  SELECT
+    pta."IFOPT" AS area_id, pta.tags AS area_tags, pta.geom AS area_geom, pta.operator_id, pta.network_id,
+    stop_elements.*
+  FROM (
+    SELECT
+      'QUAY'::category AS category, relation_id,
+      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, NULL AS "from", NULL AS "to"
+    FROM final_quays qua
+    -- Append all Entrances to the table
+    UNION ALL
+      SELECT
+        'ENTRANCE'::category AS category, relation_id,
+        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, NULL AS "from", NULL AS "to"
+      FROM final_entrances ent
+    -- Append all AccessSpaces to the table
+    UNION ALL
+      SELECT
+        'ACCESS_SPACE'::category AS category, relation_id,
+        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, NULL AS "from", NULL AS "to"
+      FROM final_access_spaces acc
+    -- Append all Parking Spaces to the table
+    UNION ALL
+      SELECT
+        'PARKING'::category AS category, relation_id,
+        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, NULL AS "from", NULL AS "to"
+      FROM final_parkings par
+    -- Append all Path Links to the table
+    UNION ALL
+      SELECT
+        'SITE_PATH_LINK'::category AS category, relation_id,
+        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat.from AS "from", pat.to AS "to"
+      FROM final_site_path_links pat
+  ) stop_elements
+  INNER JOIN final_stop_places pta
+    ON stop_elements.relation_id = pta.relation_id
+  ORDER BY pta.relation_id
+);
+
+-- Final export to XML
+
+CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
+  SELECT
+  -- <StopPlace>
+  xmlelement(name "StopPlace", xmlattributes(ex.area_id AS "id", 'any' AS "version"),
+    -- <keyList>
+    ex_keyList(ex.area_tags),
+    -- <Name>
+    ex_Name(ex.area_tags),
+    -- <ShortName>
+    ex_ShortName(ex.area_tags),
+    -- <alternativeNames>
+    ex_alternativeNames(ex.area_tags),
+    -- <Description>
+    ex_Description(ex.area_tags),
+    -- <Centroid>
+    ex_Centroid(area_geom),
+    -- <AuthorityRef>
+    ex_AuthorityRef(ex.network_id),
+    xmlagg(ex.xml_children)
+  )
+  FROM (
+    SELECT ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id,
+    CASE
+      -- <quays>
+      WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
+        xmlagg(
+          -- <Quay>
+          xmlelement(name "Quay", xmlattributes(ex.id AS "id", 'any' AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <ShortName>
+            ex_ShortName(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <QuayType>
+            ex_QuayType(ex.tags, ex.geom)
+          )
+        )
+      ))
+      -- <entrances>
+      WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
+        xmlagg(
+          -- <Entrance>
+          xmlelement(name "Entrance", xmlattributes(ex.id AS "id", 'any' AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <EntranceType>
+            ex_EntranceType(ex.tags)
+          )
+        )
+      ))
+      WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
+        xmlagg(
+          -- <Parking>
+          xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", 'any' AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <AccessSpaceType>
+            ex_AccessSpaceType(ex.tags)
+          )
+        )
+      ))
+      -- <parkings>
+      WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
+        xmlagg(
+          -- <Parking>
+          xmlelement(name "Parking", xmlattributes(ex.id AS "id", 'any' AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <ParkingType>
+            ex_ParkingType(ex.tags),
+            -- <ParkingLayout>
+            ex_ParkingLayout(ex.tags),
+            -- <TotalCapacity>
+            ex_TotalCapacity(ex.tags)
+          )
+        )
+      ))
+      WHEN ex.category = 'SITE_PATH_LINK' THEN xmlelement(name "pathLinks", (
+        xmlagg(
+          -- <SitePathLink>
+          xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", 'any' AS "version"),
+            -- <keyList>
+            ex_keyList(ex.tags),
+            -- <Distance>
+            ex_Distance(ex.geom),
+            -- <LineString>
+            ex_LineString(ex.geom, ex.id),
+            -- <From> <To>
+            ex_FromTo(ex.from, ex.to)
+          )
+        )
+      ))
+    END AS xml_children
+    FROM export_data ex
+    GROUP BY ex.category, ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id
+  ) AS ex
+  GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id
 );
