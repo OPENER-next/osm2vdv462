@@ -134,7 +134,6 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
 
   cat \
     ./scripts/pgsql/setup.sql \
-    ./scripts/pgsql/stop_places_2.sql \
     ./scripts/pgsql/organisations.sql \
     ./scripts/pgsql/export.sql \
   | docker exec -i osm2vdv462_postgis \

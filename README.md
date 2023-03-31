@@ -54,4 +54,4 @@ Ultimately a single `export.xml` file will be stored in the root directory of th
 
 `Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:5432 -> 0.0.0.0:0: listen tcp 0.0.0.0:5432: bind: address already in use`
 
-- This means, that postgresql is alredy running on your machine locally. To kill this process type `sudo lsof -i :5432`. The PID of the postgresql process is shown. Type `sudo kill -9 <pid>` to kill it.
+- This means, that postgresql is already running on your machine locally. To kill this process type `sudo lsof -i :5432`. The PID of the postgresql process is shown. Type `sudo kill -9 <pid>` to kill it.

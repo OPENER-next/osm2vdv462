@@ -499,7 +499,7 @@ CREATE TABLE final_stop_places AS (
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
-CREATE OR REPLACE TEMPORARY VIEW final_quays AS (
+CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*
   FROM platforms pts
   JOIN stop_areas_members_ref ptr
@@ -514,7 +514,7 @@ CREATE OR REPLACE TEMPORARY VIEW final_quays AS (
 /*
  * Create view that matches all entrances to public transport areas by the reference table.
  */
-CREATE OR REPLACE TEMPORARY VIEW final_entrances AS (
+CREATE OR REPLACE VIEW final_entrances AS (
   SELECT ptr.relation_id, ent.*
   FROM entrances ent
   JOIN stop_areas_members_ref ptr
@@ -529,7 +529,7 @@ CREATE OR REPLACE TEMPORARY VIEW final_entrances AS (
 /*
  * Create view that matches all access spaces to public transport areas by the reference table.
  */
-CREATE OR REPLACE TEMPORARY VIEW final_access_spaces AS (
+CREATE OR REPLACE VIEW final_access_spaces AS (
   SELECT ptr.relation_id, acc.*
   FROM access_spaces acc
   JOIN stop_areas_members_ref ptr
@@ -544,7 +544,7 @@ CREATE OR REPLACE TEMPORARY VIEW final_access_spaces AS (
 /*
  * Create view that matches all parking spaces to public transport areas by the reference table.
  */
-CREATE OR REPLACE TEMPORARY VIEW final_parkings AS (
+CREATE OR REPLACE VIEW final_parkings AS (
   SELECT ptr.relation_id, par.*
   FROM parking par
   JOIN stop_areas_members_ref ptr
@@ -564,7 +564,7 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
  * Create view that matches all elements to corresponding public transport areas.
  * This table is used in the "routing" step of the pipeline.
  */
-CREATE OR REPLACE TEMPORARY VIEW stop_area_elements AS (
+CREATE OR REPLACE VIEW stop_area_elements AS (
   SELECT
     stop_elements.*
   FROM (
@@ -625,11 +625,11 @@ CREATE TABLE paths_elements_ref (
 
 
 /*
- * Final site pat link view
+ * Final site path link view
  * Currently this is just a wrapper of the "paths" table.
  * TODO: JOIN "paths" with "paths_elements_ref" and "highways" GROUP BY "path_id" and somehow aggregate tags
  */
-CREATE OR REPLACE TEMPORARY VIEW final_site_path_links AS (
+CREATE OR REPLACE VIEW final_site_path_links AS (
   SELECT stop_area_relation_id AS relation_id, id::text, '{}'::jsonb AS tags, geom, "from", "to"
   FROM paths
 );
@@ -639,13 +639,10 @@ CREATE OR REPLACE TEMPORARY VIEW final_site_path_links AS (
  * STOP PLACES EXPORT *
  **********************/
 
-DROP TYPE IF EXISTS category CASCADE;
-CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
-
 -- Build final export data table
 -- Join all stops to their stop areas
 -- Pre joining tables is way faster than using nested selects later, even though it contains duplicated data
-CREATE OR REPLACE TEMPORARY VIEW export_data AS (
+CREATE OR REPLACE VIEW export_data AS (
   SELECT
     pta."IFOPT" AS area_id, pta.tags AS area_tags, pta.geom AS area_geom, pta.operator_id, pta.network_id,
     stop_elements.*
@@ -686,7 +683,7 @@ CREATE OR REPLACE TEMPORARY VIEW export_data AS (
 
 -- Final export to XML
 
-CREATE OR REPLACE TEMPORARY VIEW xml_stopPlaces AS (
+CREATE OR REPLACE VIEW xml_stopPlaces AS (
   SELECT
   -- <StopPlace>
   xmlelement(name "StopPlace", xmlattributes(ex.area_id AS "id", 'any' AS "version"),
