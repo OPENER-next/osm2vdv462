@@ -39,7 +39,7 @@ def makeRequest(url, payload, stop_places, i, ii):
     if response.status_code != 200:
         exit(f'Request failed with status code {response.status_code}: {response.text}')
 
-    return json.loads(response.text)
+    return response.json()
 
 
 def insertPGSQL(cur,json_data,stop_places,path_counter,i,ii):
