@@ -2,9 +2,7 @@ FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
-COPY requirements.txt .
-
-RUN pip3 install -r requirements.txt
+RUN pip install psycopg2-binary==2.9.5 requests==2.28.2
 
 COPY profiles/ profiles/
 
