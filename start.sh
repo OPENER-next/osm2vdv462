@@ -12,6 +12,26 @@ export DOCKER_NETWORK="osm2vdv462_net"
 
 EXPORT_FILE="export.xml"
 
+# Optionally import a new OSM file to be used for PPR and OSM2PGSQL
+read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT
+# Import osm data file
+if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
+  read -p "Enter the OSM file(s) that should be imported: " IMPORT_FILE
+  if ! [ -f $IMPORT_FILE ]; then
+    echo "File does not exist. Quitting ..."
+    exit 1
+  fi
+
+  read -p "Do you want to (re)run the routing preprocessing? (y/n) " RUN_PREPROCESSING
+  if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ]; then
+    docker pull ghcr.io/motis-project/ppr:edge
+    docker run -u root --rm -it -v data:/data -v $IMPORT_FILE:/data/$(basename "$IMPORT_FILE") ghcr.io/motis-project/ppr:edge /ppr/ppr-preprocess --osm /data/$(basename "$IMPORT_FILE") --graph /data/germany.ppr
+
+    # alternatively, if [elevation data](https://github.com/motis-project/ppr/wiki/Elevation-Data-(DEM)) is used:
+    # docker run -u root --rm -it -v data:/data -v $IMPORT_FILE:/data/$(basename "$IMPORT_FILE") ghcr.io/motis-project/ppr:edge -v /path/to/srtm:/srtm /ppr/ppr-preprocess --osm /data/$(basename "$IMPORT_FILE") --graph /data/germany.ppr --dem /srtm
+  fi
+fi
+
 # Optionally install and run pgadmin for easier database management
 read -p "Do you want to use pgadmin4? (y/n) " USE_PGADMIN4
 
@@ -101,10 +121,7 @@ docker exec -i osm2vdv462_postgis psql \
 echo "Imported operator list into the database."
 
 
-read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT
-# Import osm data file
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
-  read -p "Enter the OSM file(s) that should be imported: " IMPORT_FILE
   # Run osm2pgsql import scripts
   osm2pgsql \
     --host "localhost" \
@@ -129,7 +146,7 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction
 
   # Start python ppr docker
-  echo "Executing osm2vdv462_python: "
+  echo "Getting paths from PPR: "
   docker exec osm2vdv462_python python3 ppr.py
 
   cat \

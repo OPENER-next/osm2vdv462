@@ -7,7 +7,10 @@ networks:
 # Create docker volume which is a storage point located outside of containers.
 # This is required to persistently store the database between docker restarts.
 volumes:
-  osm2vdv462_postgis:
+  postgis:
+    external: false
+  data:
+    external: true # this tells docker to use the volume created outside of this compose
 
 services:
   osm2vdv462_postgis:
@@ -19,7 +22,7 @@ services:
     ports:
       - "${PGPORT}:5432"
     volumes:
-      - "osm2vdv462_postgis:/var/lib/postgresql/data"
+      - "postgis:/var/lib/postgresql/data"
     environment:
       POSTGRES_DB: ${PGDATABASE}
       POSTGRES_USER: ${PGUSER}
@@ -28,17 +31,18 @@ services:
     hostname: osm2vdv462_postgis
 
   osm2vdv462_ppr:
-    build: ppr/
     image: ghcr.io/motis-project/ppr:edge
     ports:
       - "9042:8000"
     volumes:
-      - "${PWD}/ppr/data:/data"
+      - "data:/data"
+      - "${PWD}/config/config_ppr.ini:/data/config.ini"
     networks:
       - ${DOCKER_NETWORK}
     restart: unless-stopped
     command: "/ppr/ppr-backend -c /data/config.ini"
     container_name: osm2vdv462_ppr
+    user: root
 
   osm2vdv462_python:
     build: .
