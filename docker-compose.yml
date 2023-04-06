@@ -8,9 +8,7 @@ networks:
 # This is required to persistently store the database between docker restarts.
 volumes:
   postgis:
-    external: false
-  data:
-    external: true # this tells docker to use the volume created outside of this compose
+  ppr:
 
 services:
   osm2vdv462_postgis:
@@ -30,18 +28,29 @@ services:
       PG_PRIMARY_PORT: ${PGPORT}
     hostname: osm2vdv462_postgis
 
-  osm2vdv462_ppr:
+  osm2vdv462_ppr_preprocess:
+    image: ghcr.io/motis-project/ppr:edge
+    volumes:
+      - "ppr:/data"
+      - "${IMPORT_FILE_PATH}:/data/${IMPORT_FILE}"
+    command: "/ppr/ppr-preprocess --osm /data/${IMPORT_FILE} --graph /data/germany.ppr"
+    container_name: osm2vdv462_ppr_preprocess
+    profiles:
+      - ppr_preprocess
+    user: root
+
+  osm2vdv462_ppr_backend:
     image: ghcr.io/motis-project/ppr:edge
     ports:
       - "9042:8000"
     volumes:
-      - "data:/data"
+      - "ppr:/data"
       - "${PWD}/config/config_ppr.ini:/data/config.ini"
     networks:
       - ${DOCKER_NETWORK}
     restart: unless-stopped
     command: "/ppr/ppr-backend -c /data/config.ini"
-    container_name: osm2vdv462_ppr
+    container_name: osm2vdv462_ppr_backend
     user: root
 
   osm2vdv462_python:
@@ -50,7 +59,7 @@ services:
     container_name: osm2vdv462_python
     environment:
       host_postgis: osm2vdv462_postgis
-      host_ppr: osm2vdv462_ppr
+      host_ppr: osm2vdv462_ppr_backend
     stdin_open: true
     tty: true
     networks:
