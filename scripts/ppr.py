@@ -58,10 +58,10 @@ def main():
     # Connect to PostgreSQL database
     conn = psycopg2.connect(
         host = os.environ['host_postgis'],
-        port = "5432",
-        database = "osm2vdv462",
-        user = "admin",
-        password = "admin"
+        port = os.environ['port_postgis'],
+        database = os.environ['db_postgis'],
+        user = os.environ['user_postgis'],
+        password = os.environ['password_postgis']
     )
 
     # Open a cursor to perform database operations

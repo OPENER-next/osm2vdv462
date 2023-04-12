@@ -1,12 +1,5 @@
-# export required for osm2pgsql
-# see https://osm2pgsql.org/doc/manual.html#environment-variables
 export PGUSER="admin"
-export PGPASSWORD="admin"
 export PGDATABASE="osm2vdv462"
-export PGPORT="5432"
-
-export PG_ADMIN_EMAIL="admin@mail.com"
-export PG_ADMIN_PASSWORD="admin"
 
 export DOCKER_NETWORK="osm2vdv462_net"
 
@@ -62,6 +55,14 @@ if [ $USE_PGADMIN4 ]; then
   docker-compose --profile pgadmin4 up -d
 else
   docker-compose up -d
+fi
+
+# Check the exit status of the docker compose command
+if [ $? -eq 0 ]; then
+  echo "Docker Compose stack started successfully"
+else
+  echo "Error while starting Docker Compose stack. Quitting ..."
+  exit 1
 fi
 
 echo "Waiting for PPR to load the routing graph ..."
@@ -131,14 +132,14 @@ echo "Imported operator list into the database."
 
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
   # Run osm2pgsql import scripts
-  osm2pgsql \
-    --host "localhost" \
+  docker-compose --profile osm2pgsql up -d
+  docker-compose exec osm2vdv462_osm2pgsql osm2pgsql \
     --slim \
     --drop \
     --cache 2048 \
     --output flex \
-    --style "$(pwd)/scripts/osm2pgsql/main.lua" \
-    $IMPORT_FILE_PATH
+    --style "/scripts/osm2pgsql/main.lua" \
+    /input/$IMPORT_FILE
 fi
 
 
