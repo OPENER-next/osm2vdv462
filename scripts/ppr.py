@@ -25,11 +25,11 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
-def makeRequest(url, payload, stop_places, i, ii):
-    payload["start"]["lat"] = stop_places[i]["lat"]
-    payload["start"]["lng"] = stop_places[i]["lng"]
-    payload["destination"]["lat"] = stop_places[ii]["lat"]
-    payload["destination"]["lng"] = stop_places[ii]["lng"]
+def makeRequest(url, payload, start, stop):
+    payload["start"]["lat"] = start["lat"]
+    payload["start"]["lng"] = start["lng"]
+    payload["destination"]["lat"] = stop["lat"]
+    payload["destination"]["lng"] = stop["lng"]
 
     try:
         response = requests.post(url, json=payload)
@@ -42,16 +42,16 @@ def makeRequest(url, payload, stop_places, i, ii):
     return response.json()
 
 
-def insertPGSQL(cur,json_data,stop_places,path_counter,i,ii):
+def insertPGSQL(cur,json_data,start, stop ,path_counter):
     # PPR can return multiple possible paths for one connection:
     for route in json_data["routes"]:
         path = route["path"]
         edges = route["edges"]
         # distance = route["distance"]
-        relation_id = stop_places[ii]["relation_id"]
+        relation_id = stop["relation_id"]
                 
         insertPathsElementsRef(cur, edges, path_counter)
-        insertPath(cur, relation_id, stop_places[i]["IFOPT"], stop_places[ii]["IFOPT"], path)
+        insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
 
 
 def main():
@@ -93,8 +93,8 @@ def main():
     try:
         # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
         cur.execute(
-                'SELECT stop_area_osm_id, category, id, ST_X(geom), ST_Y(geom) FROM stop_area_elements'
-            )
+            'SELECT stop_area_osm_id, category, id, ST_X(geom), ST_Y(geom) FROM stop_area_elements'
+        )
         result = cur.fetchall()
         for node in result:
             stop_places.append({"relation_id": node[0], "category": node[1], "IFOPT": node[2], "osm_id": node[2], "osm_type": node[3], "lat": node[4], "lng": node[3]})
@@ -111,13 +111,16 @@ def main():
     for i in range(len(stop_places) - 1):
         for ii in range(i + 1 , len(stop_places)):
             
-            json_data = makeRequest(url, payload,stop_places,i,ii)
-            insertPGSQL(cur,json_data,stop_places,path_counter,i,ii)
+            json_data = makeRequest(url, payload,stop_places[i],stop_places[ii])
+            insertPGSQL(cur,json_data,stop_places[i],stop_places[ii],path_counter)
             path_counter = path_counter + 1
             
             # generate bidirectional paths:
-            json_data = makeRequest(url, payload,stop_places,ii,i)
-            insertPGSQL(cur,json_data,stop_places,path_counter,ii,i)
+            # It is questionable if special cases exist, where paths between stops/quays are different
+            # and whether it justifies the double PPR computation.
+            # see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
+            json_data = makeRequest(url, payload,stop_places[ii],stop_places[i])
+            insertPGSQL(cur,json_data,stop_places[ii],stop_places[i],path_counter)
             path_counter = path_counter + 1
 
     conn.commit()
