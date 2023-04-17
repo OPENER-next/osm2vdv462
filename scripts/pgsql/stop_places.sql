@@ -143,7 +143,7 @@ BEGIN
   ELSEIF tags->>'subway' = 'yes'
     THEN result := 'metroPlatform';
   ELSEIF tags->>'tram' = 'yes' THEN
-    IF ST_GeometryType(geom) = 'ST_Point'
+    IF geom::geometry = 'ST_Point'
       THEN result := 'tramStop';
       ELSE result := 'tramPlatform';
     END IF;
