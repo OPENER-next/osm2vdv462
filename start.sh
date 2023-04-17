@@ -49,6 +49,9 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ]; then
     echo "Error: Preprocess exited with status $exit_status. Quitting ..."
     exit 1
   fi
+
+  # restart the PPR backend container to reload the new routing graph file
+  docker-compose restart osm2vdv462_ppr_backend
 fi
 
 if [ $USE_PGADMIN4 ]; then

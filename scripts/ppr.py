@@ -87,45 +87,59 @@ def main():
     except Exception as e:
         conn.close()
         exit(e)
-
-    stop_places = []
+    
+    final_stop_places = []
 
     try:
-        # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
+        # get all relevant stop places
         cur.execute(
-            'SELECT stop_area_osm_id, category, id, ST_X(geom), ST_Y(geom) FROM stop_area_elements'
+            'SELECT relation_id, "IFOPT" FROM final_stop_places'
         )
         result = cur.fetchall()
-        for node in result:
-            stop_places.append({"relation_id": node[0], "category": node[1], "IFOPT": node[2], "osm_id": node[2], "osm_type": node[3], "lat": node[4], "lng": node[3]})
+        for stop_place in result:
+            final_stop_places.append({"relation_id": stop_place[0], "IFOPT": stop_place[1]})
 
     except Exception as e:
         conn.close()
         exit(e)
 
     path_counter = 1
-    
-    print("retrieving paths ...")
 
-    # Iterate through all stop_places to get the path between all of them.
-    for i in range(len(stop_places) - 1):
-        for ii in range(i + 1 , len(stop_places)):
-            
-            json_data = makeRequest(url, payload,stop_places[i],stop_places[ii])
-            insertPGSQL(cur,json_data,stop_places[i],stop_places[ii],path_counter)
-            path_counter = path_counter + 1
-            
-            # generate bidirectional paths:
-            # It is questionable if special cases exist, where paths between stops/quays are different
-            # and whether it justifies the double PPR computation.
-            # see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
-            json_data = makeRequest(url, payload,stop_places[ii],stop_places[i])
-            insertPGSQL(cur,json_data,stop_places[ii],stop_places[i],path_counter)
-            path_counter = path_counter + 1
-
-    conn.commit()
+    # Iterate through all stop places to get the path between the stops/quays.
+    for stop_place in final_stop_places:
+        stop_places = []
         
-    print("finished!")
+        try:
+            # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
+            cur.execute(
+                f'SELECT stop_area_osm_id, category, id, ST_X(geom), ST_Y(geom) FROM stop_area_elements WHERE stop_area_osm_id = {stop_place["relation_id"]}'
+            )
+            result = cur.fetchall()
+            for node in result:
+                stop_places.append({"relation_id": node[0], "category": node[1], "IFOPT": node[2], "osm_id": node[2], "osm_type": node[3], "lat": node[4], "lng": node[3]})
+        
+        except Exception as e:
+            conn.close()
+            exit(e)
+            
+        for i in range(len(stop_places) - 1):
+            for ii in range(i + 1 , len(stop_places)):
+                
+                json_data = makeRequest(url, payload,stop_places[i],stop_places[ii])
+                insertPGSQL(cur,json_data,stop_places[i],stop_places[ii],path_counter)
+                path_counter = path_counter + 1
+                
+                # generate bidirectional paths:
+                # It is questionable if special cases exist, where paths between stops/quays are different
+                # and whether it justifies the double PPR computation.
+                # see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
+                json_data = makeRequest(url, payload,stop_places[ii],stop_places[i])
+                insertPGSQL(cur,json_data,stop_places[ii],stop_places[i],path_counter)
+                path_counter = path_counter + 1
+
+        conn.commit()
+        
+    print("Finished receiving paths from PPR!")
 
     conn.close()
 
