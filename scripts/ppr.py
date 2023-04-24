@@ -13,12 +13,12 @@ def insertPath(cur, relation_id, dhid_from, dhid_to, path):
 
 
 def insertPathsElementsRef(cur, edges, path_counter):
-    osm_way_ids = []
+    # ways with id == 0 are additional edges generated from PPR, that are part of the path
+    # those are not inserted into the paths_elements_ref database, because they won't add additional tags to the path
+    # crossed ways (negative osm way id) are included, but only the absolute value (the crossed way) is inserted
     for edge in edges:
         osm_way_id = abs(edge["osm_way_id"])
-        # currently also the crossed ways are included (negative way osm id)
-        if osm_way_id != 0 and osm_way_id not in osm_way_ids:
-            osm_way_ids.append(osm_way_id)
+        if osm_way_id != 0:
             cur.execute(
                 "INSERT INTO paths_elements_ref (path_id, osm_type, osm_id) VALUES (%s, %s, %s)",
                 (path_counter, 'W', osm_way_id)
