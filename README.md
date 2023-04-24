@@ -4,10 +4,8 @@ This repository offers a shell script to convert OpenStreetMap data (public tran
 
 ## Installation:
 
-The export pipeline requires [docker](https://www.docker.com/) and [osm2pgsql](https://osm2pgsql.org/) to be installed.
-You can find the respective installation instructions here:
-- [How to install docker](https://docs.docker.com/engine/install/)
-- [How to install osm2pgsql](https://osm2pgsql.org/doc/install.html)
+The export pipeline requires [docker](https://www.docker.com/) to be installed.
+You can find the respective installation instruction here: [how to install docker](https://docs.docker.com/engine/install/).
 
 The OSM data to be used can be downloaded from [geofabrik](https://download.geofabrik.de/). There you can find OSM extracts for all sorts of countries and regions. It has to be in the *.osm.pbf format. Please have in mind that there are high memory and RAM requirements for bigger regions as e.g. germany. On smaller machines you should use smaller extracts for testing.
 
