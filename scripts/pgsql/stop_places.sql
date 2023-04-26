@@ -441,7 +441,7 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * Create view that contains all stop areas with the wikidata id of their respective operator and network.
  * Ids will be NULL if no matching operator/network can be found.
  */
-CREATE OR REPLACE TEMPORARY VIEW stop_places_with_organisations AS (
+CREATE OR REPLACE VIEW stop_places_with_organisations AS (
   SELECT stop_areas.*, op.id AS operator_id, net.id AS network_id
   FROM stop_areas
   LEFT JOIN organisations op
@@ -475,8 +475,7 @@ CREATE OR REPLACE TEMPORARY VIEW stop_places_with_organisations AS (
  * Aggregate member stop geometries to stop areas
  * Split JOINs because GROUP BY doesn't allow grouping by all columns of a specific table
  */
-DROP TABLE IF EXISTS final_stop_places CASCADE;
-CREATE TABLE final_stop_places AS (
+CREATE OR REPLACE VIEW final_stop_places AS (
   WITH
     stops_clustered_by_relation_id AS (
       SELECT ptr.relation_id, ST_Collect(geom) AS geom

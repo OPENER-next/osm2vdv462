@@ -9,7 +9,7 @@ You can find the respective installation instruction here: [how to install docke
 
 The OSM data to be used can be downloaded from [geofabrik](https://download.geofabrik.de/). There you can find OSM extracts for all sorts of countries and regions. It has to be in the *.osm.pbf format. Please have in mind that there are high memory and RAM requirements for bigger regions as e.g. germany. On smaller machines you should use smaller extracts for testing.
 
-For generating the paths between stop places, the [Per Pedes Routing](https://motis-project.de/docs/api/endpoint/ppr.html) submodule from the [MOTIS project](http://motis-project.de/) is used.
+For generating the paths between stops, the [Per Pedes Routing](https://motis-project.de/docs/api/endpoint/ppr.html) submodule from the [MOTIS project](http://motis-project.de/) is used.
 
 ## How to use:
 
