@@ -1,4 +1,5 @@
 import psycopg2
+from psycopg2.extras import DictCursor
 import requests
 import json
 import os
@@ -25,6 +26,18 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
+def insertPGSQL(cur,insertRoutes,start, stop ,path_counter):
+    # PPR can return multiple possible paths for one connection:
+    for route in insertRoutes:
+        path = route["path"]
+        edges = route["edges"]
+        # distance = route["distance"]
+        relation_id = stop["relation_id"]
+
+        insertPathsElementsRef(cur, edges, path_counter)
+        insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
+
+
 def makeRequest(url, payload, start, stop):
     payload["start"]["lat"] = start["lat"]
     payload["start"]["lng"] = start["lng"]
@@ -42,18 +55,6 @@ def makeRequest(url, payload, start, stop):
     return response.json()
 
 
-def insertPGSQL(cur,json_data,start, stop ,path_counter):
-    # PPR can return multiple possible paths for one connection:
-    for route in json_data["routes"]:
-        path = route["path"]
-        edges = route["edges"]
-        # distance = route["distance"]
-        relation_id = stop["relation_id"]
-                
-        insertPathsElementsRef(cur, edges, path_counter)
-        insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
-
-
 def main():
     # Connect to PostgreSQL database
     conn = psycopg2.connect(
@@ -65,7 +66,7 @@ def main():
     )
 
     # Open a cursor to perform database operations
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=DictCursor)
 
     url = 'http://' + os.environ['host_ppr'] + ':8000/api/route'
     payload = {
@@ -88,16 +89,22 @@ def main():
         conn.close()
         exit(e)
     
-    final_stop_places = []
+    stop_area_elements = {}
 
     try:
-        # get all relevant stop places
+        # get all relevant stop areas
+        # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
         cur.execute(
-            'SELECT relation_id, "IFOPT" FROM final_stop_places'
+            'SELECT stop_area_osm_id as relation_id, category, id as "IFOPT", ST_X(geom) as lng, ST_Y(geom) as lat FROM stop_area_elements'
         )
         result = cur.fetchall()
-        for stop_place in result:
-            final_stop_places.append({"relation_id": stop_place[0], "IFOPT": stop_place[1]})
+        for entry in result:
+            # create a dictionary where the keys are the relation_ids of the stop_areas
+            # and the values are a list of dictionaries containing all elements of that area
+            if entry["relation_id"] not in stop_area_elements:
+                stop_area_elements[entry["relation_id"]] = [dict(entry)]
+            else:
+                stop_area_elements[entry["relation_id"]].append(dict(entry))
 
     except Exception as e:
         conn.close()
@@ -105,36 +112,23 @@ def main():
 
     path_counter = 1
 
-    # Iterate through all stop places to get the path between the stops/quays.
-    for stop_place in final_stop_places:
-        stop_places = []
+    # Iterate through all stop areas to get the path between the elements of this area.
+    for entry in stop_area_elements:
+        elements = stop_area_elements[entry]
         
-        try:
-            # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
-            cur.execute(
-                f'SELECT stop_area_osm_id, category, id, ST_X(geom), ST_Y(geom) FROM stop_area_elements WHERE stop_area_osm_id = {stop_place["relation_id"]}'
-            )
-            result = cur.fetchall()
-            for node in result:
-                stop_places.append({"relation_id": node[0], "category": node[1], "IFOPT": node[2], "osm_id": node[2], "osm_type": node[3], "lat": node[4], "lng": node[3]})
-        
-        except Exception as e:
-            conn.close()
-            exit(e)
-            
-        for i in range(len(stop_places) - 1):
-            for ii in range(i + 1 , len(stop_places)):
+        for i in range(len(elements) - 1):
+            for ii in range(i + 1 , len(elements)):
                 
-                json_data = makeRequest(url, payload,stop_places[i],stop_places[ii])
-                insertPGSQL(cur,json_data,stop_places[i],stop_places[ii],path_counter)
+                json_data = makeRequest(url, payload,elements[i],elements[ii])
+                insertPGSQL(cur,json_data["routes"],elements[i],elements[ii],path_counter)
                 path_counter = path_counter + 1
                 
                 # generate bidirectional paths:
                 # It is questionable if special cases exist, where paths between stops/quays are different
-                # and whether it justifies the double PPR computation.
+                # and whether it justifies double the path computation with PPR.
                 # see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
-                json_data = makeRequest(url, payload,stop_places[ii],stop_places[i])
-                insertPGSQL(cur,json_data,stop_places[ii],stop_places[i],path_counter)
+                json_data = makeRequest(url, payload,elements[ii],elements[i])
+                insertPGSQL(cur,json_data["routes"],elements[ii],elements[i],path_counter)
                 path_counter = path_counter + 1
 
         conn.commit()
