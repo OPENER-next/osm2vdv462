@@ -1,4 +1,4 @@
-package.path = package.path .. ';scripts/osm2pgsql/?.lua'
+package.path = package.path .. ';/scripts/osm2pgsql/?.lua'
 
 require 'stop_areas'
 require 'platforms'

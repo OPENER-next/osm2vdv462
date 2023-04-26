@@ -1,0 +1,112 @@
+# Create a network to use the Postgis-Server in another container.
+# Networks are used to connect containers and allow them to communicate.
+networks:
+  osm2vdv462_net:
+    name: ${DOCKER_NETWORK}
+
+# Create docker volume which is a storage point located outside of containers.
+# This is required to persistently store the database between docker restarts.
+volumes:
+  postgis:
+  ppr:
+  pgadmin:
+
+services:
+  osm2vdv462_postgis:
+    image: postgis/postgis:14-master
+    container_name: osm2vdv462_postgis
+    restart: unless-stopped
+    networks:
+      - ${DOCKER_NETWORK}
+    ports:
+      - "${PGPORT}:5432"
+    volumes:
+      - "postgis:/var/lib/postgresql/data"
+    environment:
+      POSTGRES_DB: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      PG_PRIMARY_PORT: ${PGPORT}
+    hostname: osm2vdv462_postgis
+
+  osm2vdv462_ppr_preprocess:
+    image: ghcr.io/motis-project/ppr:edge
+    volumes:
+      - "ppr:/data"
+      # a placeholder path must be set when "IMPORT_FILE_PATH" is empty, otherwise there will be an error decoding the compose project
+      # the current path is used as the fallback host bind mount location: ":-${PWD}"
+      # see: "Shell Parameter Expansion"
+      - "${IMPORT_FILE_PATH:-${PWD}}:/data/input/${IMPORT_FILE}"
+    command: "/ppr/ppr-preprocess --osm /data/input/${IMPORT_FILE} --graph /data/germany.ppr"
+    container_name: osm2vdv462_ppr_preprocess
+    profiles:
+      - ppr_preprocess
+    user: root
+
+  osm2vdv462_ppr_backend:
+    image: ghcr.io/motis-project/ppr:edge
+    ports:
+      - "9042:8000"
+    volumes:
+      - "ppr:/data"
+      - "${PWD}/config/config_ppr.ini:/data/config.ini"
+    networks:
+      - ${DOCKER_NETWORK}
+    restart: unless-stopped
+    command: "/ppr/ppr-backend -c /data/config.ini"
+    container_name: osm2vdv462_ppr_backend
+    user: root
+
+  osm2vdv462_python:
+    build: .
+    image: osm2vdv462_python
+    container_name: osm2vdv462_python
+    environment:
+      host_postgis: osm2vdv462_postgis
+      port_postgis: ${PGPORT}
+      db_postgis: ${PGDATABASE}
+      user_postgis: ${PGUSER}
+      password_postgis: ${PGPASSWORD}
+      host_ppr: osm2vdv462_ppr_backend
+    stdin_open: true
+    tty: true
+    networks:
+      - ${DOCKER_NETWORK}
+    hostname: osm2vdv462_python
+
+  osm2vdv462_pgadmin4:
+    image: dpage/pgadmin4
+    ports:
+      - "80:80"
+    container_name: osm2vdv462_pgadmin4
+    volumes:
+      - "${PWD}/config/pgadmin_servers.json:/pgadmin4/servers.json"
+      - "pgadmin:/var/lib/pgadmin"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PG_ADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PG_ADMIN_PASSWORD}
+    networks:
+      - ${DOCKER_NETWORK}
+    hostname: osm2vdv462_pgadmin4
+    profiles:
+      - pgadmin4
+
+  osm2vdv462_osm2pgsql:
+    image: rportugal/osm2pgsql
+    container_name: osm2vdv462_osm2pgsql
+    volumes:
+      - "${PWD}/scripts/osm2pgsql:/scripts/osm2pgsql"
+      - "${IMPORT_FILE_PATH:-${PWD}}:/input/${IMPORT_FILE}"
+    environment:
+      PGHOST: osm2vdv462_postgis
+      PGDATABASE: ${PGDATABASE}
+      PGUSER: ${PGUSER}
+      PGPASSWORD: ${PGPASSWORD}
+      IMPORT_FILE: ${IMPORT_FILE}
+    networks:
+      - ${DOCKER_NETWORK}
+    stdin_open: true
+    tty: true
+    hostname: osm2vdv462_osm2pgsql
+    profiles:
+      - osm2pgsql
