@@ -555,9 +555,6 @@ CREATE OR REPLACE VIEW final_parkings AS (
  * PATH LINKS *
  **************/
 
-DROP TYPE IF EXISTS category CASCADE;
-CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
-
 /*
  * Mapping of stop places to elements
  * Create view that matches all elements to corresponding public transport areas.
@@ -594,34 +591,6 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
     ON stop_elements.stop_area_osm_id = pta.relation_id
   ORDER BY pta.relation_id
 );
-
-
-/*
- * Contains all paths between stop place elements
- * This table will be filled in the "routing" step of the pipeline.
- */
-DROP TABLE IF EXISTS paths CASCADE;
-CREATE TABLE paths (
-  id SERIAL PRIMARY KEY,
-  stop_area_relation_id INT,
-  "from" TEXT,
-  "to" TEXT,
-  geom GEOMETRY
-);
-
-
-/*
- * Reference table for paths to osm elements (id and type)
- * A path is likely composed of multiple OSM elements and an OSM element can be used in multiple paths.
- * This table wil be filled in the "routing" step of the pipeline.
- */
-DROP TABLE IF EXISTS paths_elements_ref CASCADE;
-CREATE TABLE paths_elements_ref (
-  path_id INT,
-  osm_type CHAR(1),
-  osm_id INT
-);
-
 
 /*
  * Final site path link view

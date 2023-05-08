@@ -96,42 +96,11 @@ if [ "$HEALTH" -ne "200" ]; then
 fi
 echo "Docker Compose project started."
 
-echo "Download latest public transport operator list from Wikidata:"
-csv=$(
-  curl 'https://query.wikidata.org/sparql' \
-    --data-urlencode query@"$(pwd)/pipeline/organisations/wikidata_query.rq" \
-    --header 'Accept: text/csv' \
-    --progress-bar
-)
+# Run setup scripts
+pipeline/setup/setup.sh
 
-docker exec -i osm2vdv462_postgis psql \
-  -U $PGUSER \
-  -d $PGDATABASE \
-  -q \
-  -c "
-    DROP TABLE IF EXISTS organisations CASCADE;
-    CREATE TABLE organisations (
-      id varchar(255) NOT NULL,
-      label Text NOT NULL,
-      alternatives Text,
-      official_name Text,
-      short_name varchar(255),
-      website varchar(255),
-      email varchar(255),
-      phone varchar(255),
-      address Text,
-      type varchar(255)
-    );
-  "
-
-docker exec -i osm2vdv462_postgis psql \
-  -U $PGUSER \
-  -d $PGDATABASE \
-  -q \
-  -c "COPY organisations FROM STDIN DELIMITER ',' CSV HEADER;" <<< "$csv"
-
-echo "Imported operator list into the database."
-
+# Run organisations import script
+pipeline/organisations/organisations.sh
 
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
   # Run osm2pgsql import scripts
