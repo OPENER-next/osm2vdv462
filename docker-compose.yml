@@ -95,7 +95,7 @@ services:
     image: rportugal/osm2pgsql
     container_name: osm2vdv462_osm2pgsql
     volumes:
-      - "${PWD}/scripts/osm2pgsql:/scripts/osm2pgsql"
+      - "${PWD}/pipeline/import:/scripts/osm2pgsql"
       - "${IMPORT_FILE_PATH:-${PWD}}:/input/${IMPORT_FILE}"
     environment:
       PGHOST: osm2vdv462_postgis

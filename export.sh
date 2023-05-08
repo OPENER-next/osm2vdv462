@@ -99,7 +99,7 @@ echo "Docker Compose project started."
 echo "Download latest public transport operator list from Wikidata:"
 csv=$(
   curl 'https://query.wikidata.org/sparql' \
-    --data-urlencode query@"$(pwd)/scripts/wikidata_query.rq" \
+    --data-urlencode query@"$(pwd)/pipeline/organisations/wikidata_query.rq" \
     --header 'Accept: text/csv' \
     --progress-bar
 )
@@ -152,8 +152,8 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
   echo "Exporting..."
   # Run export sql script via psql
   cat \
-    ./scripts/pgsql/setup.sql \
-    ./scripts/pgsql/stop_places.sql \
+    ./pipeline/export/setup.sql \
+    ./pipeline/export/stop_places.sql \
   | docker exec -i osm2vdv462_postgis \
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction
 
@@ -162,9 +162,9 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
   docker exec osm2vdv462_python python3 ppr.py
 
   cat \
-    ./scripts/pgsql/setup.sql \
-    ./scripts/pgsql/organisations.sql \
-    ./scripts/pgsql/export.sql \
+    ./pipeline/export/setup.sql \
+    ./pipeline/export/organisations.sql \
+    ./pipeline/export/export.sql \
   | docker exec -i osm2vdv462_postgis \
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction \
   > $EXPORT_FILE
