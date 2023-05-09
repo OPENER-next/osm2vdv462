@@ -121,7 +121,6 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
   echo "Exporting..."
   # Run export sql script via psql
   cat \
-    ./pipeline/export/setup.sql \
     ./pipeline/export/stop_places.sql \
   | docker exec -i osm2vdv462_postgis \
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction
@@ -131,7 +130,6 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
   docker exec osm2vdv462_python python3 ppr.py
 
   cat \
-    ./pipeline/export/setup.sql \
     ./pipeline/export/organisations.sql \
     ./pipeline/export/export.sql \
   | docker exec -i osm2vdv462_postgis \

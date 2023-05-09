@@ -14,18 +14,19 @@ The OSM2VDV462 pipeline consists of multiple steps:
 ## File structure:
 
 **setup:**
-- `setup.sh`: create tables to be used in the later steps
+- `setup.sh`: configure database and create tables to be used in the later steps
 
 **organisations:**
 - `organisations.sh`: download and import the public transport operator list from Wikidata into the database
 - `wikidata_query.rq`: SPARQL Wikidata query used to get the data from operators (transport companies) in germany
 
-**import:**
-- `*.lua`: lua scripts used by osm2pgsql to analyse the `*.osm.pbf` file and create tables for e.g. stop places or access spaces
+**stop_places:**
+- `*.lua`: lua scripts used by osm2pgsql to analyse the `*.osm.pbf` file and create tables for the elements of stop places
 
 **routing:**
 - `ppr.py`: load relevant data from the database, make requests to PPR and save the paths into the database
-- `profiles/`: `*.json` profiles used to make the request to PPR (see [PPR GitHub](https://github.com/motis-project/ppr/tree/master/profiles))
+- `config/config_ppr.ini`: config file used to configure the PPR backend
+- `config/profiles/*.json`: json profiles used to make the request to PPR (see [PPR GitHub](https://github.com/motis-project/ppr/tree/master/profiles))
 
 **export:**
 - `*.sql*`: SQL scripts used to extract relevant elements from the database and combine them into views that are used by PPR and to make the final export

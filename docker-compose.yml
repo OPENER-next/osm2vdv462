@@ -49,7 +49,7 @@ services:
       - "9042:8000"
     volumes:
       - "ppr:/data"
-      - "${PWD}/pipeline/routing/config_ppr.ini:/data/config.ini"
+      - "${PWD}/pipeline/routing/config/config_ppr.ini:/data/config.ini"
     networks:
       - ${DOCKER_NETWORK}
     restart: unless-stopped
@@ -58,7 +58,7 @@ services:
     user: root
 
   osm2vdv462_python:
-    build: .
+    build: ./pipeline/routing
     image: osm2vdv462_python
     container_name: osm2vdv462_python
     environment:
@@ -95,7 +95,7 @@ services:
     image: rportugal/osm2pgsql
     container_name: osm2vdv462_osm2pgsql
     volumes:
-      - "${PWD}/pipeline/import:/scripts/osm2pgsql"
+      - "${PWD}/pipeline/stop_places:/scripts/osm2pgsql"
       - "${IMPORT_FILE_PATH:-${PWD}}:/input/${IMPORT_FILE}"
     environment:
       PGHOST: osm2vdv462_postgis
