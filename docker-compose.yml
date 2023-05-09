@@ -49,7 +49,7 @@ services:
       - "9042:8000"
     volumes:
       - "ppr:/data"
-      - "${PWD}/config/config_ppr.ini:/data/config.ini"
+      - "${PWD}/pipeline/routing/config_ppr.ini:/data/config.ini"
     networks:
       - ${DOCKER_NETWORK}
     restart: unless-stopped
@@ -80,7 +80,7 @@ services:
       - "80:80"
     container_name: osm2vdv462_pgadmin4
     volumes:
-      - "${PWD}/config/pgadmin_servers.json:/pgadmin4/servers.json"
+      - "${PWD}/pipeline/setup/pgadmin_servers.json:/pgadmin4/servers.json"
       - "pgadmin:/var/lib/pgadmin"
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PG_ADMIN_EMAIL}
