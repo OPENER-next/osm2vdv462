@@ -7,17 +7,17 @@ This repository offers a shell script to convert OpenStreetMap data (public tran
 The export pipeline requires [docker](https://www.docker.com/) to be installed.
 You can find the respective installation instruction here: [how to install docker](https://docs.docker.com/engine/install/).
 
-The OSM data to be used can be downloaded from [geofabrik](https://download.geofabrik.de/). There you can find OSM extracts for all sorts of countries and regions. It has to be in the *.osm.pbf format. Please have in mind that there are high memory and RAM requirements for bigger regions as e.g. germany. On smaller machines you should use smaller extracts for testing.
+The OSM data to be used can be downloaded from [geofabrik](https://download.geofabrik.de/). There you can find OSM extracts for all sorts of countries and regions. It has to be in the `*.osm.pbf` format. Please have in mind that there are high memory and RAM requirements for bigger regions as e.g. germany. On smaller machines you should use smaller extracts for testing.
 
 For generating the paths between stops, the [Per Pedes Routing](https://motis-project.de/docs/api/endpoint/ppr.html) submodule from the [MOTIS project](http://motis-project.de/) is used.
 
 ## How to use:
 
-0. Run the `start.sh`, which will guide you through the conversion process step by step.
+0. Run the `export.sh`, which will guide you through the conversion process step by step.
 
 1. On the first run docker will download and create the necessary containers, as well as some volumes where the data will be stored.
 
-   You are asked if you want to import an OSM file. You have to do this for the first run: Input the path of the *.osm.pbf file and run the preprocessing. If you decide not to import any data the export will use the data from the last imported file. If you later want to update the OSM data to the newest version just again download the desired file, import it and run the PPR preprocessing step. 
+   You are asked if you want to import an OSM file. You have to do this for the first run: Input the path of the `*.osm.pbf` file and run the preprocessing. If you decide not to import any data the export will use the data from the last imported file. If you later want to update the OSM data to the newest version just again download the desired file, import it and run the PPR preprocessing step. 
 
 2. Optionally you can choose to run pgAdmin, which provides a graphical user interface to view, manage and edit the PostgreSQL database.
 If you do so you can access it via `localhost` using the following credentials: email=`admin@mail.com`, password=`admin`
