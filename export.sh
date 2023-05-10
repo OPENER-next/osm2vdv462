@@ -68,6 +68,8 @@ else
   exit 1
 fi
 
+# perform healthcheck on the PPR container to wait until the routing graph is loaded
+# it is not possible to do this in docker compose, because the container would need a tool like curl or wget to perform the healthcheck
 echo "Waiting for PPR to load the routing graph ..."
 MAX_RETRIES=20
 RETRY_DELAY=10
