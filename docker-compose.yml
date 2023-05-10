@@ -32,6 +32,11 @@ services:
       POSTGRES_PASSWORD: ${PGPASSWORD}
       PG_PRIMARY_PORT: ${PGPORT}
     hostname: osm2vdv462_postgis
+    healthcheck: # test if the database is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
 
   osm2vdv462_ppr_preprocess:
     image: ghcr.io/motis-project/ppr:edge
@@ -92,6 +97,9 @@ services:
     networks:
       - ${DOCKER_NETWORK}
     hostname: osm2vdv462_pgadmin4
+    depends_on:
+      osm2vdv462_postgis:
+        condition: service_healthy # wait for the database to be ready before starting pgadmin
     profiles:
       - pgadmin4
 
@@ -112,5 +120,8 @@ services:
     stdin_open: true
     tty: true
     hostname: osm2vdv462_osm2pgsql
+    depends_on:
+      osm2vdv462_postgis:
+        condition: service_healthy # wait for the database to be ready before starting pgadmin
     profiles:
       - osm2pgsql

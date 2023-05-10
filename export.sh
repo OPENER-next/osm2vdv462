@@ -94,7 +94,6 @@ if [ "$HEALTH" -ne "200" ]; then
     echo "Container is not healthy after $MAX_RETRIES retries"
     exit 1
 fi
-echo "Docker Compose project started."
 
 # Run organisations import script
 pipeline/organisations/organisations.sh
