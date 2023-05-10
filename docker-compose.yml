@@ -22,6 +22,10 @@ services:
       - "${PGPORT}:5432"
     volumes:
       - "postgis:/var/lib/postgresql/data"
+      # copy the sql setup files to the container
+      # the sql files located in this folder will be executed once on the first start of the container
+      # see: https://hub.docker.com/_/postgres (Initialization scripts)
+      - "${PWD}/pipeline/setup/sql/:/docker-entrypoint-initdb.d/"
     environment:
       POSTGRES_DB: ${PGDATABASE}
       POSTGRES_USER: ${PGUSER}

@@ -96,9 +96,6 @@ if [ "$HEALTH" -ne "200" ]; then
 fi
 echo "Docker Compose project started."
 
-# Run setup scripts
-pipeline/setup/setup.sh
-
 # Run organisations import script
 pipeline/organisations/organisations.sh
 
@@ -119,16 +116,18 @@ read -p "Do you want to run the export? (y/n) " RUN_EXPORT
 # Export to VDV462 xml file
 if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ]; then
   echo "Exporting..."
-  # Run export sql script via psql
+
+  # Run stop_places sql script via psql
   cat \
     ./pipeline/export/stop_places.sql \
   | docker exec -i osm2vdv462_postgis \
     psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction
 
-  # Start python ppr docker
+  # Execute ppr script in the python docker
   echo "Getting paths from PPR: "
   docker exec osm2vdv462_python python3 ppr.py
 
+  # Run organisations and export sql script via psql
   cat \
     ./pipeline/export/organisations.sql \
     ./pipeline/export/export.sql \
