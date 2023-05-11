@@ -592,6 +592,14 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
   ORDER BY pta.relation_id
 );
 
+
+/* 
+ * Truncate paths and paths_elements_ref table (delete all rows from previous runs)
+ */
+TRUNCATE TABLE paths;
+TRUNCATE TABLE paths_elements_ref;
+
+
 /*
  * Final site path link view
  * Currently this is just a wrapper of the "paths" table.

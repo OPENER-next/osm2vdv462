@@ -107,7 +107,7 @@ services:
     image: rportugal/osm2pgsql
     container_name: osm2vdv462_osm2pgsql
     volumes:
-      - "${PWD}/pipeline/stop_places:/scripts/osm2pgsql"
+      - "${PWD}/pipeline/stop_places/lua:/scripts/osm2pgsql"
       - "${IMPORT_FILE_PATH:-${PWD}}:/input/${IMPORT_FILE}"
     environment:
       PGHOST: osm2vdv462_postgis
@@ -122,6 +122,6 @@ services:
     hostname: osm2vdv462_osm2pgsql
     depends_on:
       osm2vdv462_postgis:
-        condition: service_healthy # wait for the database to be ready before starting pgadmin
+        condition: service_healthy # wait for the database to be ready before starting osm2pgsql
     profiles:
       - osm2pgsql
