@@ -23,10 +23,12 @@ The OSM2VDV462 pipeline consists of multiple steps:
 
 - `organisations.sh`: Download and import the public transport operator list from Wikidata into the database.
 - `wikidata_query.rq`: SPARQL Wikidata query used to get the data from operators (transport companies) in germany.
+- `sql/organisations.sql`: SQL script used to extract organisations data from the database that is later used by the exporting step.
 
 **stop_places:**
 
-- `*.lua`: Lua scripts used by osm2pgsql to analyse the `*.osm.pbf` file and create tables for the elements of stop places.
+- `lua/*.lua`: Lua scripts used by osm2pgsql to analyse the `*.osm.pbf` file and create tables for the elements of stop places.
+- `sql/stop_places.sql`: SQL script used to extract relevant elements from the database and combine them into views that are used by PPR and the exporting step.
 
 **routing:**
 
@@ -37,4 +39,4 @@ The OSM2VDV462 pipeline consists of multiple steps:
 
 **export:**
 
-- `*.sql*`: SQL scripts used to extract relevant elements from the database and combine them into views that are used by PPR and to make the final export.
+- `export.sql*`: SQL script used to make the final export.
