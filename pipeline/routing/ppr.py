@@ -4,6 +4,12 @@ import requests
 import json
 import os
 
+def truncateTables(conn, cur):
+    cur.execute('TRUNCATE TABLE paths')
+    cur.execute('TRUNCATE TABLE paths_elements_ref')
+    conn.commit()
+
+
 def insertPath(cur, relation_id, dhid_from, dhid_to, path):
     stepList = [f"{step[0]} {step[1]}" for step in path]
     linestring = "LINESTRING(" + ",".join(stepList) + ")"
@@ -67,6 +73,9 @@ def main():
 
     # Open a cursor to perform database operations
     cur = conn.cursor(cursor_factory=DictCursor)
+    
+    # Truncate paths and paths_elements_ref table (delete all rows from previous runs)
+    truncateTables(conn, cur)
 
     url = 'http://' + os.environ['host_ppr'] + ':8000/api/route'
     payload = {
