@@ -22,12 +22,21 @@ services:
       - "${PGPORT}:5432"
     volumes:
       - "postgis:/var/lib/postgresql/data"
+      # copy the sql setup files to the container
+      # the sql files located in this folder will be executed once on the first start of the container
+      # see: https://hub.docker.com/_/postgres (Initialization scripts)
+      - "${PWD}/pipeline/setup/sql/:/docker-entrypoint-initdb.d/"
     environment:
       POSTGRES_DB: ${PGDATABASE}
       POSTGRES_USER: ${PGUSER}
       POSTGRES_PASSWORD: ${PGPASSWORD}
       PG_PRIMARY_PORT: ${PGPORT}
     hostname: osm2vdv462_postgis
+    healthcheck: # test if the database is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
 
   osm2vdv462_ppr_preprocess:
     image: ghcr.io/motis-project/ppr:edge
@@ -49,7 +58,7 @@ services:
       - "9042:8000"
     volumes:
       - "ppr:/data"
-      - "${PWD}/config/config_ppr.ini:/data/config.ini"
+      - "${PWD}/pipeline/routing/config/config_ppr.ini:/data/config.ini"
     networks:
       - ${DOCKER_NETWORK}
     restart: unless-stopped
@@ -58,7 +67,7 @@ services:
     user: root
 
   osm2vdv462_python:
-    build: .
+    build: ./pipeline/routing
     image: osm2vdv462_python
     container_name: osm2vdv462_python
     environment:
@@ -80,7 +89,7 @@ services:
       - "80:80"
     container_name: osm2vdv462_pgadmin4
     volumes:
-      - "${PWD}/config/pgadmin_servers.json:/pgadmin4/servers.json"
+      - "${PWD}/pipeline/setup/pgadmin_servers.json:/pgadmin4/servers.json"
       - "pgadmin:/var/lib/pgadmin"
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PG_ADMIN_EMAIL}
@@ -88,6 +97,9 @@ services:
     networks:
       - ${DOCKER_NETWORK}
     hostname: osm2vdv462_pgadmin4
+    depends_on:
+      osm2vdv462_postgis:
+        condition: service_healthy # wait for the database to be ready before starting pgadmin
     profiles:
       - pgadmin4
 
@@ -95,7 +107,7 @@ services:
     image: rportugal/osm2pgsql
     container_name: osm2vdv462_osm2pgsql
     volumes:
-      - "${PWD}/scripts/osm2pgsql:/scripts/osm2pgsql"
+      - "${PWD}/pipeline/stop_places/lua:/scripts/osm2pgsql"
       - "${IMPORT_FILE_PATH:-${PWD}}:/input/${IMPORT_FILE}"
     environment:
       PGHOST: osm2vdv462_postgis
@@ -108,5 +120,8 @@ services:
     stdin_open: true
     tty: true
     hostname: osm2vdv462_osm2pgsql
+    depends_on:
+      osm2vdv462_postgis:
+        condition: service_healthy # wait for the database to be ready before starting osm2pgsql
     profiles:
       - osm2pgsql

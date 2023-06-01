@@ -61,14 +61,14 @@ LANGUAGE SQL IMMUTABLE;
  * because some fields might have multiple values (e.g. multiple phone numbers).
  * Therefore we remove any duplicated rows here and only take the first row values.
  */
-CREATE OR REPLACE TEMPORARY VIEW export_organisations_data AS (
+CREATE OR REPLACE VIEW export_organisations_data AS (
   SELECT DISTINCT ON (id) *
   FROM organisations
 );
 
 -- Final export to XML
 
-CREATE OR REPLACE TEMPORARY VIEW xml_organisations AS (
+CREATE OR REPLACE VIEW xml_organisations AS (
   SELECT CASE
     WHEN "type" = 'operator' THEN xmlelement(name "Operator",
       xmlattributes(id AS "id", 'any' AS "version"),
