@@ -4,8 +4,8 @@ The OSM2VDV462 pipeline consists of multiple steps:
 
 1. (optionally) input an `*.osm.pbf` file to be used for the [Per Pedes Routing](https://motis-project.de/docs/api/endpoint/ppr.html) (PPR) preprocessing and osm2pgsql
 2. start the docker-compose services
-3. (optionally) import the osm file into the database with osm2pgsql
-4. import organisations data from wikidata into the database
+3. import organisations data from wikidata into the database
+4. (optionally) import the osm file into the database with osm2pgsql
 5. extract all relevant elements of stop places and create combined views
 6. (optionally) run the PPR preprocessing
 7. get the footpaths between all relevant places from PPR and insert them into the database
@@ -15,7 +15,7 @@ The OSM2VDV462 pipeline consists of multiple steps:
 
 **setup:**
 
-- `run.sh`: User interaction and import of the osm file into the database with osm2pgsql.
+- `run.sh`: User interaction and variable initialization.
 - `sql/*.sql`: SQL files to configure the database and create some tables that are filled in the later steps. These files are mounted to the postgis docker container and are executed in alphabetical order once when the container is started (see "Initialization scripts": [Docker postgres](https://hub.docker.com/_/postgres)).
 - `pgadmin_servers.json`: Config file for pgAdmin, mounted as a bind mount to the `osm2vdv462_pgadmin4` docker container.
 
@@ -27,7 +27,7 @@ The OSM2VDV462 pipeline consists of multiple steps:
 
 **stop_places:**
 
-- `run.sh`: Run sql scripts regarding stop places via psql.
+- `run.sh`: Optionally import the osm file into the database with osm2pgsql. Run sql scripts regarding stop places via psql.
 - `lua/*.lua`: Lua scripts used by osm2pgsql to analyse the `*.osm.pbf` file and create tables for the elements of stop places.
 - `sql/stop_places.sql`: SQL script used to extract relevant elements from the database and combine them into views that are used by PPR and the exporting step.
 

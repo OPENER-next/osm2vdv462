@@ -4,7 +4,8 @@
 # source the script to be able to use the environment variables in the following steps
 source pipeline/setup/run.sh
 
-pipeline/organisations/run.sh
+# Optionally install and run pgadmin for easier database management
+read -p "Do you want to use pgadmin4? (y/n) " USE_PGADMIN4
 
 # Start Docker Compose project:
 echo "Starting Docker Compose project ..."
@@ -14,6 +15,8 @@ if [ $USE_PGADMIN4 ]; then
 else
   docker-compose up -d
 fi
+
+pipeline/organisations/run.sh
 
 # Check the exit status of the docker compose command
 if [ $? -eq 0 ]; then
