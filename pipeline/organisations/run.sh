@@ -1,14 +1,26 @@
-# Run organisations import script
-pipeline/organisations/organisations.sh
+# Download and import public transport operator list from Wikidata
 
-if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
-  # Run osm2pgsql import scripts
-  docker-compose --profile osm2pgsql up -d
-  docker-compose exec osm2vdv462_osm2pgsql osm2pgsql \
-    --slim \
-    --drop \
-    --cache 2048 \
-    --output flex \
-    --style "/scripts/osm2pgsql/main.lua" \
-    /input/$IMPORT_FILE
-fi
+# Download latest public transport operator list from Wikidata
+echo "Download latest public transport operator list from Wikidata:"
+csv=$(
+  curl 'https://query.wikidata.org/sparql' \
+    --data-urlencode query@"$(pwd)/pipeline/organisations/wikidata_query.rq" \
+    --header 'Accept: text/csv' \
+    --progress-bar
+)
+
+# Truncate organisations table (delete all rows from previous runs) and import operator list into the database
+docker exec -i osm2vdv462_postgis psql \
+  -U $PGUSER \
+  -d $PGDATABASE \
+  -q \
+  -c "TRUNCATE TABLE organisations;" \
+  -c "COPY organisations FROM STDIN DELIMITER ',' CSV HEADER;" <<< "$csv"
+
+echo "Imported operator list into the database."
+
+# Run organisations sql script via psql
+  cat \
+    ./pipeline/organisations/sql/organisations.sql \
+  | docker exec -i osm2vdv462_postgis \
+    psql -U $PGUSER -d $PGDATABASE --tuples-only --quiet --no-align --field-separator="" --single-transaction

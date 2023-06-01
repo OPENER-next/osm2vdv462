@@ -1,10 +1,27 @@
 # This script is meant to be run from the root of the project
 # Run the steps of the pipeline after each other
 
-# source the scripts to be able to use the variables in the folllowing steps
+# source the script to be able to use the environment variables in the following steps
 source pipeline/setup/run.sh
 
-source pipeline/organisations/run.sh
+pipeline/organisations/run.sh
+
+# Start Docker Compose project:
+echo "Starting Docker Compose project ..."
+
+if [ $USE_PGADMIN4 ]; then
+  docker-compose --profile pgadmin4 up -d
+else
+  docker-compose up -d
+fi
+
+# Check the exit status of the docker compose command
+if [ $? -eq 0 ]; then
+  echo "Docker Compose stack started successfully"
+else
+  echo "Error while starting Docker Compose stack. Quitting ..."
+  exit 1
+fi
 
 read -p "Do you want to run the export? (y/n) " RUN_EXPORT
 # Export to VDV462 xml file
