@@ -34,7 +34,7 @@ services:
     hostname: osm2vdv462_postgis
     healthcheck: # test if the database is ready to accept connections
       test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
-      interval: 5s
+      interval: 10s
       timeout: 1s
       retries: 5
 
@@ -64,6 +64,8 @@ services:
     restart: unless-stopped
     command: "/ppr/ppr-backend -c /data/config.ini"
     container_name: osm2vdv462_ppr_backend
+    profiles:
+      - ppr_backend
     user: root
 
   osm2vdv462_python:
