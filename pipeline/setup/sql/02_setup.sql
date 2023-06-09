@@ -54,3 +54,17 @@ CREATE TABLE paths_elements_ref (
  * Used in the "routing" and the "export" step of the pipeline.
  */
 CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
+
+
+/* 
+ * Create access_spaces table:
+ * Table for the access spaces that will be generated from the paths.
+ * This table will be filled in the "routing" step of the pipeline.
+ */
+CREATE TABLE access_spaces (
+  osm_id INT PRIMARY KEY,
+  osm_type CHAR(1),
+  "IFOPT" TEXT,
+  tags jsonb,
+  geom GEOMETRY
+);

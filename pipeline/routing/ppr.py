@@ -7,6 +7,7 @@ import os
 def truncateTables(conn, cur):
     cur.execute('TRUNCATE TABLE paths')
     cur.execute('TRUNCATE TABLE paths_elements_ref')
+    cur.execute('TRUNCATE TABLE access_spaces')
     conn.commit()
 
 
@@ -32,6 +33,81 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
+def entryExists(cur, osm_id):
+    cur.execute("SELECT osm_id FROM access_spaces WHERE osm_id = %s", (osm_id,))
+    return cur.fetchone() is not None
+
+
+def insertAccessSpaces(cur, osm_id, osm_type, IFOPT, tags, geom):
+    geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
+    if not entryExists(cur, osm_id):
+        print(f"Inserting access space: {osm_id} , {geomString}")
+        try:
+            cur.execute(
+                'INSERT INTO access_spaces (osm_id, osm_type, "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s)',
+                (osm_id, osm_type, IFOPT, tags, geomString)
+            )
+        except Exception as e:
+            exit(e)
+        return 1
+    else:
+        print(f"Access space already exists: {osm_id} , {geomString}")
+        return 0
+
+
+def identifyAccessSpaces(cur, edges):
+    # access spaces are identified, when there is:
+    #   - 1) a transition from a edge_type to another (e.g. from 'footway' to 'elevator')
+    #   - 2) a transition from a street_type to another (e.g. from a 'footway' 'stairs')
+    special_street_types = ["stairs", "escalator", "moving_walkway"]
+    edge_type = None
+    previous_edge_type = None
+    
+    for i in range(len(edges)):
+        osm_way_id = abs(edges[i]["osm_way_id"])
+        edge_type = edges[i]["edge_type"]
+        street_type = edges[i]["street_type"]
+        
+        # if the edge is the first edge of the path, there is no previous edge to compare to
+        if i == 0:
+            previous_edge_type = edge_type
+            previous_street_type = street_type
+            continue
+
+        # 1) edge_type transition:
+        if edge_type != "elevator" and previous_edge_type == "elevator":
+            # change from "normal" edge to "elevator" edge --> generate access space
+            if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
+                print("inserted access space: change from normal to elevator")
+                previous_edge_type = edge_type
+                previous_street_type = street_type
+            continue
+        elif edge_type == "elevator" and previous_edge_type != "elevator":
+            # change from "elevator" edge to "normal" edge --> generate access space
+            if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
+                print("inserted access space: change from elevator to normal")
+                previous_edge_type = edge_type
+                previous_street_type = street_type
+            continue
+        
+        # 2) street_type transition:
+        if edge_type == "street" or edge_type == "footway":
+            if previous_street_type == "none":  # previous edge was generated from PPR
+                continue
+            elif street_type not in special_street_types and previous_street_type in special_street_types:
+                # change from "normal" edge to "special" edge --> generate access space
+                if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
+                    print("inserted access space: change from normal to special")
+                    previous_edge_type = edge_type
+                    previous_street_type = street_type
+            elif street_type in special_street_types and previous_street_type not in special_street_types:
+                # change from "special" edge to "normal" edge --> generate access space
+                if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
+                    print("inserted access space: change from special to normal")
+                    previous_edge_type = edge_type
+                    previous_street_type = street_type
+        
+
 def insertPGSQL(cur,insertRoutes,start, stop ,path_counter):
     # PPR can return multiple possible paths for one connection:
     for route in insertRoutes:
@@ -42,6 +118,8 @@ def insertPGSQL(cur,insertRoutes,start, stop ,path_counter):
 
         insertPathsElementsRef(cur, edges, path_counter)
         insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
+        
+        identifyAccessSpaces(cur, edges)
 
 
 def makeRequest(url, payload, start, stop):
