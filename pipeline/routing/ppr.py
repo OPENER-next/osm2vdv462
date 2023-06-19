@@ -33,26 +33,18 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
-def entryExists(cur, osm_id):
-    cur.execute("SELECT osm_id FROM access_spaces WHERE osm_id = %s", (osm_id,))
-    return cur.fetchone() is not None
-
-
 def insertAccessSpaces(cur, osm_id, osm_type, IFOPT, tags, geom):
     geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
-    if not entryExists(cur, osm_id):
-        print(f"Inserting access space: {osm_id} , {geomString}")
-        try:
-            cur.execute(
-                'INSERT INTO access_spaces (osm_id, osm_type, "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s)',
-                (osm_id, osm_type, IFOPT, tags, geomString)
-            )
-        except Exception as e:
-            exit(e)
-        return 1
-    else:
-        print(f"Access space already exists: {osm_id} , {geomString}")
-        return 0
+    print(f"Inserting access space: {osm_id} , {geomString}")
+    try:
+        # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
+        cur.execute(
+            'INSERT INTO access_spaces (osm_id, osm_type, "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING',
+            (osm_id, osm_type, IFOPT, tags, geomString)
+        )
+    except Exception as e:
+        exit(e)
+    return 1
 
 
 def identifyAccessSpaces(cur, edges):
