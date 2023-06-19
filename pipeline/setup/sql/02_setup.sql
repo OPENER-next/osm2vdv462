@@ -60,9 +60,10 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
  * Create access_spaces table:
  * Table for the access spaces that will be generated from the paths.
  * This table will be filled in the "routing" step of the pipeline.
+ * The ids of the nodes have to be stored as BIGINT because the OSM ids are too big for INT.
  */
 CREATE TABLE access_spaces (
-  osm_id INT PRIMARY KEY,
+  osm_id BIGINT PRIMARY KEY,
   osm_type CHAR(1),
   "IFOPT" TEXT,
   tags jsonb,

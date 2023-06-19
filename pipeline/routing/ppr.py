@@ -35,11 +35,10 @@ def insertPathsElementsRef(cur, edges, path_counter):
 
 def insertAccessSpaces(cur, osm_id, osm_type, IFOPT, tags, geom):
     geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
-    print(f"Inserting access space: {osm_id} , {geomString}")
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
-            'INSERT INTO access_spaces (osm_id, osm_type, "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING',
+            'INSERT INTO access_spaces (osm_id, osm_type, "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
             (osm_id, osm_type, IFOPT, tags, geomString)
         )
     except Exception as e:
@@ -51,53 +50,36 @@ def identifyAccessSpaces(cur, edges):
     # access spaces are identified, when there is:
     #   - 1) a transition from a edge_type to another (e.g. from 'footway' to 'elevator')
     #   - 2) a transition from a street_type to another (e.g. from a 'footway' 'stairs')
+    special_edge_types = ["elevator"]
     special_street_types = ["stairs", "escalator", "moving_walkway"]
     edge_type = None
     previous_edge_type = None
     
-    for i in range(len(edges)):
-        osm_way_id = abs(edges[i]["osm_way_id"])
-        edge_type = edges[i]["edge_type"]
-        street_type = edges[i]["street_type"]
-        
-        # if the edge is the first edge of the path, there is no previous edge to compare to
-        if i == 0:
+    edgeIter = iter(edges)
+    
+    # if the edge is the first edge of the path, there is no previous edge to compare to
+    firstEdge = next(edgeIter)
+    previous_edge_type = firstEdge["edge_type"]
+    previous_street_type = firstEdge["street_type"]
+    
+    for edge in edgeIter:
+        osm_way_id = abs(edge["osm_way_id"])
+        edge_type = edge["edge_type"]
+        street_type = edge["street_type"]
+        from_node_osm_id = edge["from_node_osm_id"]
+        to_node_osm_id = edge["to_node_osm_id"]
+
+        if( # 1) transition from one edge_type to another
+            edge_type != previous_edge_type and
+            (edge_type in special_edge_types or previous_edge_type in special_edge_types)
+        )\
+        or( # 2) transition from one street_type to another
+            street_type != previous_street_type and
+            (street_type in special_street_types or previous_street_type in special_street_types)
+        ):
+            insertAccessSpaces(cur, from_node_osm_id, 'N', None, None, edge["path"][0])
             previous_edge_type = edge_type
             previous_street_type = street_type
-            continue
-
-        # 1) edge_type transition:
-        if edge_type != "elevator" and previous_edge_type == "elevator":
-            # change from "normal" edge to "elevator" edge --> generate access space
-            if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
-                print("inserted access space: change from normal to elevator")
-                previous_edge_type = edge_type
-                previous_street_type = street_type
-            continue
-        elif edge_type == "elevator" and previous_edge_type != "elevator":
-            # change from "elevator" edge to "normal" edge --> generate access space
-            if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
-                print("inserted access space: change from elevator to normal")
-                previous_edge_type = edge_type
-                previous_street_type = street_type
-            continue
-        
-        # 2) street_type transition:
-        if edge_type == "street" or edge_type == "footway":
-            if previous_street_type == "none":  # previous edge was generated from PPR
-                continue
-            elif street_type not in special_street_types and previous_street_type in special_street_types:
-                # change from "normal" edge to "special" edge --> generate access space
-                if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
-                    print("inserted access space: change from normal to special")
-                    previous_edge_type = edge_type
-                    previous_street_type = street_type
-            elif street_type in special_street_types and previous_street_type not in special_street_types:
-                # change from "special" edge to "normal" edge --> generate access space
-                if insertAccessSpaces(cur, osm_way_id, 'N', None, None, edges[i]["path"][0]):
-                    print("inserted access space: change from special to normal")
-                    previous_edge_type = edge_type
-                    previous_street_type = street_type
         
 
 def insertPGSQL(cur,insertRoutes,start, stop ,path_counter):
