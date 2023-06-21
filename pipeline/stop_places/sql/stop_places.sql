@@ -574,12 +574,6 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
         relation_id AS stop_area_osm_id, 'ENTRANCE'::category AS category,
         ent."IFOPT" AS "id", ST_Centroid(ent.geom) AS geom
       FROM final_entrances ent
-    -- Append all AccessSpaces to the table
-    UNION ALL
-      SELECT
-        relation_id AS stop_area_osm_id, 'ACCESS_SPACE'::category AS category,
-        acc."IFOPT" AS "id", ST_Centroid(acc.geom) AS geom
-      FROM final_access_spaces acc
     -- Append all Parking Spaces to the table
     UNION ALL
       SELECT
