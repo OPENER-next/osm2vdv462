@@ -7,6 +7,7 @@ import os
 def truncateTables(conn, cur):
     cur.execute('TRUNCATE TABLE paths')
     cur.execute('TRUNCATE TABLE paths_elements_ref')
+    cur.execute('TRUNCATE TABLE path_links')
     cur.execute('TRUNCATE TABLE access_spaces')
     conn.commit()
 
@@ -33,20 +34,41 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
+def insertPathsLinks(cur, pathLink, id_from, id_to):
+    edgeList = [f"{edge[0]} {edge[1]}" for edge in pathLink]
+    linestring = "LINESTRING(" + ",".join(edgeList) + ")"
+    
+    if id_from < id_to:
+        smaller_node_id = id_from
+        bigger_node_id = id_to
+    else:
+        smaller_node_id = id_to
+        bigger_node_id = id_from
+        
+    # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
+    cur.execute(
+        'INSERT INTO path_links (path_id, smaller_node_id, bigger_node_id, geom) VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
+        (1, smaller_node_id, bigger_node_id, linestring)
+    )
+    
+    # empty pathLink
+    pathLink.clear()
+    
+
 def insertAccessSpaces(cur, osm_id, level, IFOPT, tags, geom):
     geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
-            'INSERT INTO access_spaces (osm_id, osm_type, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
-            (osm_id, 'N', level, IFOPT, tags, geomString)
+            'INSERT INTO access_spaces (osm_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
+            (osm_id, level, IFOPT, tags, geomString)
         )
     except Exception as e:
         exit(e)
     return 1
 
 
-def identifyAccessSpaces(cur, edges, relation_id):
+def identifyAccessSpaces(cur, edges, relation_id, dhid_from, dhid_to):
     # access spaces are identified, when there is:
     #   - 1) a transition from a edge_type to another (e.g. from 'footway' to 'elevator')
     #   - 2) a transition from a street_type to another (e.g. from a 'footway' 'stairs')
@@ -59,9 +81,10 @@ def identifyAccessSpaces(cur, edges, relation_id):
     
     # if the edge is the first edge of the path, there is no previous edge to compare to
     firstEdge = next(edgeIter)
-    previous_edge_type = firstEdge["edge_type"]
-    previous_street_type = firstEdge["street_type"]
-    previous_level = firstEdge["level"]
+    previous_edge = firstEdge
+    
+    pathLink = [firstEdge["path"][0], firstEdge["path"][1]]
+    id_from = dhid_from
     
     # Logical structure of the id generation for access spaces:
     # level:                       0                   1                     0                   -1                     0
@@ -85,12 +108,11 @@ def identifyAccessSpaces(cur, edges, relation_id):
     # and the level of the current edge when going out of the stairs.
     
     for edge in edgeIter:
-        osm_way_id = abs(edge["osm_way_id"])
         edge_type = edge["edge_type"]
+        previous_edge_type = previous_edge["edge_type"]
         street_type = edge["street_type"]
-        from_node_osm_id = edge["from_node_osm_id"]
-        to_node_osm_id = edge["to_node_osm_id"]
-        level = edge["level"]
+        previous_street_type = previous_edge["street_type"]
+        path = edge["path"]
 
         if( # 1) transition from one edge_type to another
             edge_type != previous_edge_type and
@@ -100,23 +122,37 @@ def identifyAccessSpaces(cur, edges, relation_id):
                 street_type != previous_street_type and
                 (street_type in special_street_types or previous_street_type in special_street_types)
             ):
-            # special case: elevator
+            # special cases:
             if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator":
-                # going into the elevator/stairs: use level from the previous edge
-                current_level = previous_level
+                # going into the elevator/stairs/escalator: use level from the previous edge
+                # this might fail if two special cases are directly connected (e.g. escalator to stairs)
+                current_level = previous_edge["level"]
             else:
                 # normal case: use current level
-                current_level = level
+                current_level = edge["level"]
             
             # create unique id for the access space, that will be filled into the 'IFOPT' column
             # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
-            ifopt = str(relation_id) + "_" + str(from_node_osm_id) + ":" + (str(current_level) if current_level != None else "")
+            ifopt = str(relation_id) + "_" + str(edge["from_node_osm_id"]) + ":" + (str(current_level) if current_level != None else "")
             
-            insertAccessSpaces(cur, from_node_osm_id, current_level, ifopt, None, edge["path"][0])
+            insertAccessSpaces(cur, edge["from_node_osm_id"], current_level, ifopt, None, edge["path"][0])
             
-        previous_edge_type = edge_type
-        previous_street_type = street_type
-        previous_level = level
+            # insert pathLink into database
+            insertPathsLinks(cur, pathLink, id_from, ifopt)
+            id_from = ifopt
+        
+        # append edge to pathLink
+        if not pathLink:
+            pathLink = [path[0], path[1]]
+        else:
+            # only append the second node of the path, because the first node is the same as the last node of the previous path
+            pathLink.append(path[1])
+            
+        # if edge is the last edge of the path, the pathLink is inserted into the database
+        if edge == edges[-1]:
+            insertPathsLinks(cur, pathLink, id_from, dhid_to)
+
+        previous_edge = edge
         
 
 def insertPGSQL(cur, insertRoutes, start, stop, path_counter):
@@ -130,7 +166,7 @@ def insertPGSQL(cur, insertRoutes, start, stop, path_counter):
         insertPathsElementsRef(cur, edges, path_counter)
         insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
         
-        identifyAccessSpaces(cur, edges, relation_id)
+        identifyAccessSpaces(cur, edges, relation_id, start["IFOPT"], stop["IFOPT"])
 
 
 def makeRequest(url, payload, start, stop):

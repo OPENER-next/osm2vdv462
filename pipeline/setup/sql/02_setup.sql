@@ -48,6 +48,21 @@ CREATE TABLE paths_elements_ref (
 );
 
 
+/* Create path_links table:
+ * Table for the elemental path links between nodes.
+ * Nodes can be stop_area_elements (IFOPT from OSM) and access_spaces (IFOPT generated in the "routing" step).
+ * This table will be filled in the "routing" step of the pipeline.
+ */
+CREATE TABLE path_links (
+  path_id INT,
+  smaller_node_id TEXT,
+  bigger_node_id TEXT,
+  geom GEOMETRY,
+  CONSTRAINT PK_node PRIMARY KEY (smaller_node_id,bigger_node_id),
+  CONSTRAINT ids_check CHECK (smaller_node_id < bigger_node_id)
+);
+
+
 /* 
  * Create category type:
  * Enum type named "category" to account for the different types of stop place elements.
@@ -65,10 +80,9 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
  */
 CREATE TABLE access_spaces (
   osm_id BIGINT NOT NULL,
-  osm_type CHAR(1),
   "level" TEXT NOT NULL,
   "IFOPT" TEXT NOT NULL,
   tags jsonb,
   geom GEOMETRY,
-  CONSTRAINT PK_id UNIQUE (osm_id,"level")
+  CONSTRAINT PK_id PRIMARY KEY (osm_id,"level")
 );
