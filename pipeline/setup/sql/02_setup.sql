@@ -60,12 +60,15 @@ CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SI
  * Create access_spaces table:
  * Table for the access spaces that will be generated from the paths.
  * This table will be filled in the "routing" step of the pipeline.
- * The ids of the nodes have to be stored as BIGINT because the OSM ids are too big for INT.
+ * The osm_ids of the nodes have to be stored as BIGINT because the OSM ids are too big for INT.
+ * The constraint PK_id is used to make sure, that there is only one access space per node and level.
  */
 CREATE TABLE access_spaces (
-  osm_id BIGINT PRIMARY KEY,
+  osm_id BIGINT NOT NULL,
   osm_type CHAR(1),
-  "IFOPT" TEXT,
+  "level" TEXT NOT NULL,
+  "IFOPT" TEXT NOT NULL,
   tags jsonb,
-  geom GEOMETRY
+  geom GEOMETRY,
+  CONSTRAINT PK_id UNIQUE (osm_id,"level")
 );

@@ -33,27 +33,27 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
-def insertAccessSpaces(cur, osm_id, osm_type, IFOPT, tags, geom):
+def insertAccessSpaces(cur, osm_id, level, IFOPT, tags, geom):
     geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
-            'INSERT INTO access_spaces (osm_id, osm_type, "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
-            (osm_id, osm_type, IFOPT, tags, geomString)
+            'INSERT INTO access_spaces (osm_id, osm_type, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
+            (osm_id, 'N', level, IFOPT, tags, geomString)
         )
     except Exception as e:
         exit(e)
     return 1
 
 
-def identifyAccessSpaces(cur, edges):
+def identifyAccessSpaces(cur, edges, relation_id):
     # access spaces are identified, when there is:
     #   - 1) a transition from a edge_type to another (e.g. from 'footway' to 'elevator')
     #   - 2) a transition from a street_type to another (e.g. from a 'footway' 'stairs')
     special_edge_types = ["elevator"]
     special_street_types = ["stairs", "escalator", "moving_walkway"]
     edge_type = None
-    previous_edge_type = None
+    current_level = None # needed for the special cases
     
     edgeIter = iter(edges)
     
@@ -61,6 +61,28 @@ def identifyAccessSpaces(cur, edges):
     firstEdge = next(edgeIter)
     previous_edge_type = firstEdge["edge_type"]
     previous_street_type = firstEdge["street_type"]
+    previous_level = firstEdge["level"]
+    
+    # Logical structure of the id generation for access spaces:
+    # level:                       0                   1                     0                   -1                     0
+    # OSM:            (id_1) ---Footway--- (id_2) ---Stairs--- (id_3) ---Elevator--- (id_3) ---Footway--- (id_4) ---Escalator--- (id_5)
+    # access spaces:  ----------- [X] --------------- [X] ----------------- [X] ---------------- [X] ----------------- [X] ------------
+    # id(id,level):   ----------------- (id_2,NULL) --------- (id_3,1) ----------- (id_3,-1) --------- (id_4,NULL) --------------------
+    
+    # Special cases:
+    
+    # Elevators:
+    # Their 'osm_way_id', 'from_node_osm_id' and 'to_node_osm_id' are the same. One elevator can have multiple levels, and therefore multiple access spaces.
+    # So the elevators access spaces are identified by the level of the previous edge when stepping into the elevator,
+    # and the level of the current edge when stepping out of the elevator.
+    
+    # Escalators:
+    # Their level is dependent on the direction of the path. So the access spaces are identified by the level of the previous edge when going into the escalator,
+    # and the level of the current edge when going out of the escalator.
+    
+    # Stairs:
+    # They always have the same level, regardless of the direction. So the access spaces are identified by the level of the previous edge when going into the stairs,
+    # and the level of the current edge when going out of the stairs.
     
     for edge in edgeIter:
         osm_way_id = abs(edge["osm_way_id"])
@@ -68,21 +90,36 @@ def identifyAccessSpaces(cur, edges):
         street_type = edge["street_type"]
         from_node_osm_id = edge["from_node_osm_id"]
         to_node_osm_id = edge["to_node_osm_id"]
+        level = edge["level"]
 
         if( # 1) transition from one edge_type to another
             edge_type != previous_edge_type and
             (edge_type in special_edge_types or previous_edge_type in special_edge_types)
-        )\
-        or( # 2) transition from one street_type to another
-            street_type != previous_street_type and
-            (street_type in special_street_types or previous_street_type in special_street_types)
-        ):
-            insertAccessSpaces(cur, from_node_osm_id, 'N', None, None, edge["path"][0])
-            previous_edge_type = edge_type
-            previous_street_type = street_type
+            )\
+            or( # 2) transition from one street_type to another
+                street_type != previous_street_type and
+                (street_type in special_street_types or previous_street_type in special_street_types)
+            ):
+            # special case: elevator
+            if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator":
+                # going into the elevator/stairs: use level from the previous edge
+                current_level = previous_level
+            else:
+                # normal case: use current level
+                current_level = level
+            
+            # create unique id for the access space, that will be filled into the 'IFOPT' column
+            # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
+            ifopt = str(relation_id) + "_" + str(from_node_osm_id) + ":" + (str(current_level) if current_level != None else "")
+            
+            insertAccessSpaces(cur, from_node_osm_id, current_level, ifopt, None, edge["path"][0])
+            
+        previous_edge_type = edge_type
+        previous_street_type = street_type
+        previous_level = level
         
 
-def insertPGSQL(cur,insertRoutes,start, stop ,path_counter):
+def insertPGSQL(cur, insertRoutes, start, stop, path_counter):
     # PPR can return multiple possible paths for one connection:
     for route in insertRoutes:
         path = route["path"]
@@ -93,7 +130,7 @@ def insertPGSQL(cur,insertRoutes,start, stop ,path_counter):
         insertPathsElementsRef(cur, edges, path_counter)
         insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
         
-        identifyAccessSpaces(cur, edges)
+        identifyAccessSpaces(cur, edges, relation_id)
 
 
 def makeRequest(url, payload, start, stop):
@@ -174,13 +211,14 @@ def main():
     path_counter = 1
 
     # Iterate through all stop areas to get the path between the elements of this area.
+    # 'entry' is the relation_id of the stop_area
     for entry in stop_area_elements:
         elements = stop_area_elements[entry]
         
         for i in range(len(elements) - 1):
             for ii in range(i + 1 , len(elements)):
                 
-                json_data = makeRequest(url, payload,elements[i],elements[ii])
+                json_data = makeRequest(url,payload,elements[i],elements[ii])
                 insertPGSQL(cur,json_data["routes"],elements[i],elements[ii],path_counter)
                 path_counter = path_counter + 1
                 
@@ -188,7 +226,7 @@ def main():
                 # It is questionable if special cases exist, where paths between stops/quays are different
                 # and whether it justifies double the path computation with PPR.
                 # see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
-                json_data = makeRequest(url, payload,elements[ii],elements[i])
+                json_data = makeRequest(url,payload,elements[ii],elements[i])
                 insertPGSQL(cur,json_data["routes"],elements[ii],elements[i],path_counter)
                 path_counter = path_counter + 1
 
