@@ -31,3 +31,8 @@ Ultimately a single `export.xml` file will be stored in the root directory of th
 `Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:5432 -> 0.0.0.0:0: listen tcp 0.0.0.0:5432: bind: address already in use`
 
 - This means, that postgresql is already running on your machine locally. To kill this process type `sudo lsof -i :5432`. The PID of the postgresql process is shown. Type `sudo kill -9 <pid>` to kill it.
+
+
+`ERROR: Named volume "example_data/tu-campus_technopark.osm.pbf:/data/input/tu-campus_technopark.osm.pbf:rw" is used in service "osm2vdv462_ppr_preprocess" but no declaration was found in the volumes section.`
+
+- This might happen when you supply a relative file path to the script that doesn't start with `./` (see [stackoverflow](https://stackoverflow.com/questions/51416182/error-named-volume-xplore-root-xplore-rtdatarw-is-used-in-service-dsearch) question)
