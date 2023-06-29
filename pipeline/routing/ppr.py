@@ -34,7 +34,7 @@ def insertPathsElementsRef(cur, edges, path_counter):
             )
 
 
-def insertPathsLinks(cur, pathLink, id_from, id_to):
+def insertPathLink(cur, pathLink, id_from, id_to):
     edgeList = [f"{edge[0]} {edge[1]}" for edge in pathLink]
     linestring = "LINESTRING(" + ",".join(edgeList) + ")"
     
@@ -51,46 +51,31 @@ def insertPathsLinks(cur, pathLink, id_from, id_to):
         (1, smaller_node_id, bigger_node_id, linestring)
     )
     
-    # empty pathLink
-    pathLink.clear()
-    
 
-def insertAccessSpaces(cur, osm_id, level, IFOPT, tags, geom):
+def insertAccessSpaces(cur, osm_id, level, DHID, tags, geom):
     geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
             'INSERT INTO access_spaces (osm_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
-            (osm_id, level, IFOPT, tags, geomString)
+            (osm_id, level, DHID, tags, geomString)
         )
     except Exception as e:
         exit(e)
     return 1
 
 
-def identifyAccessSpaces(cur, edges, relation_id, dhid_from, dhid_to):
-    # access spaces are identified, when there is:
+def requiresAccessSpace(currentEdge, previousEdge):
+    # access spaces are required, when there is:
     #   - 1) a transition from a edge_type to another (e.g. from 'footway' to 'elevator')
-    #   - 2) a transition from a street_type to another (e.g. from a 'footway' 'stairs')
-    special_edge_types = ["elevator"]
-    special_street_types = ["stairs", "escalator", "moving_walkway"]
-    edge_type = None
-    current_level = None # needed for the special cases
-    
-    edgeIter = iter(edges)
-    
-    # if the edge is the first edge of the path, there is no previous edge to compare to
-    firstEdge = next(edgeIter)
-    previous_edge = firstEdge
-    
-    pathLink = [firstEdge["path"][0], firstEdge["path"][1]]
-    id_from = dhid_from
+    #   - 2) a transition from a street_type to another (e.g. from a 'footway' to 'stairs')
     
     # Logical structure of the id generation for access spaces:
     # level:                       0                   1                     0                   -1                     0
     # OSM:            (id_1) ---Footway--- (id_2) ---Stairs--- (id_3) ---Elevator--- (id_3) ---Footway--- (id_4) ---Escalator--- (id_5)
     # access spaces:  ----------- [X] --------------- [X] ----------------- [X] ---------------- [X] ----------------- [X] ------------
     # id(id,level):   ----------------- (id_2,NULL) --------- (id_3,1) ----------- (id_3,-1) --------- (id_4,NULL) --------------------
+    
     
     # Special cases:
     
@@ -107,53 +92,79 @@ def identifyAccessSpaces(cur, edges, relation_id, dhid_from, dhid_to):
     # They always have the same level, regardless of the direction. So the access spaces are identified by the level of the previous edge when going into the stairs,
     # and the level of the current edge when going out of the stairs.
     
-    for edge in edgeIter:
-        edge_type = edge["edge_type"]
-        previous_edge_type = previous_edge["edge_type"]
-        street_type = edge["street_type"]
-        previous_street_type = previous_edge["street_type"]
-        path = edge["path"]
-
-        if( # 1) transition from one edge_type to another
-            edge_type != previous_edge_type and
-            (edge_type in special_edge_types or previous_edge_type in special_edge_types)
-            )\
-            or( # 2) transition from one street_type to another
-                street_type != previous_street_type and
-                (street_type in special_street_types or previous_street_type in special_street_types)
-            ):
-            # special cases:
-            if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator":
-                # going into the elevator/stairs/escalator: use level from the previous edge
-                # this might fail if two special cases are directly connected (e.g. escalator to stairs)
-                current_level = previous_edge["level"]
-            else:
-                # normal case: use current level
-                current_level = edge["level"]
-            
-            # create unique id for the access space, that will be filled into the 'IFOPT' column
-            # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
-            ifopt = str(relation_id) + "_" + str(edge["from_node_osm_id"]) + ":" + (str(current_level) if current_level != None else "")
-            
-            insertAccessSpaces(cur, edge["from_node_osm_id"], current_level, ifopt, None, edge["path"][0])
-            
-            # insert pathLink into database
-            insertPathsLinks(cur, pathLink, id_from, ifopt)
-            id_from = ifopt
+    special_edge_types = ["elevator"]
+    special_street_types = ["stairs", "escalator", "moving_walkway"]
+    
+    edge_type = currentEdge["edge_type"]
+    previousEdge_type = previousEdge["edge_type"]
+    street_type = currentEdge["street_type"]
+    previous_street_type = previousEdge["street_type"]
+    
+    if( # 1) transition from one edge_type to another
+        edge_type != previousEdge_type and
+        (edge_type in special_edge_types or previousEdge_type in special_edge_types)
+        )\
+        or( # 2) transition from one street_type to another
+            street_type != previous_street_type and
+            (street_type in special_street_types or previous_street_type in special_street_types)
+        ):
+        return True
+    return False
         
-        # append edge to pathLink
-        if not pathLink:
-            pathLink = [path[0], path[1]]
+
+def createAccessSpace(cur, currentEdge, previousEdge, relation_id):
+    edge_type = currentEdge["edge_type"]
+    street_type = currentEdge["street_type"]
+    
+    if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator":
+        # going into the elevator/stairs/escalator: use level from the previous edge
+        # this might fail if two special cases are directly connected (e.g. escalator to stairs)
+        current_level = previousEdge["level"]
+    else:
+        # normal case: use current level
+        current_level = currentEdge["level"]
+    
+    # create unique id for the access space, that will be filled into the 'IFOPT' column
+    # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
+    newDHID = str(relation_id) + "_" + str(currentEdge["from_node_osm_id"]) + ":" + (str(current_level) if current_level != None else "")
+    
+    insertAccessSpaces(cur, currentEdge["from_node_osm_id"], current_level, newDHID, None, currentEdge["path"][0])
+    
+    return newDHID
+
+
+def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
+    accessSpaceCreated = False
+    edgeIter = iter(edges)
+    firstEdge = next(edgeIter)
+    previousEdge = firstEdge
+    previousDHID = dhid_from
+    
+    # create 'pathLink' that will be inserted into the database
+    # - a pathLink is a list of two nodes (stop_area_element and/or access_space), that are connected by one or multiple edges
+    # - an edge can consist multiple nodes (polyline)
+    pathLink = firstEdge["path"]
+    
+    for i in range(len(edges) - 1): # the first edge is already handled
+        edge = next(edgeIter)
+        
+        if requiresAccessSpace(previousEdge, edge): # checks whether the given parameters need the creation of an access space
+            newDHID = createAccessSpace(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space
+            insertPathLink(cur, pathLink, previousDHID, newDHID)
+            pathLink = edge["path"] # create a new pathLink consisting of the current edge
+            previousDHID = newDHID
+            accessSpaceCreated = True
         else:
-            # only append the second node of the path, because the first node is the same as the last node of the previous path
-            pathLink.append(path[1])
-            
-        # if edge is the last edge of the path, the pathLink is inserted into the database
-        if edge == edges[-1]:
-            insertPathsLinks(cur, pathLink, id_from, dhid_to)
+            # append all but the first node of the edge, because the first node is the same as the last node of the previous edge
+            # use extend, because there can be multiple nodes in the edge (polyline)
+            pathLink.extend(edge["path"][1:])
 
-        previous_edge = edge
+        previousEdge = edge
         
+    if not accessSpaceCreated:
+        # no access space was created, so insert the full PPR path between the two stop_area_elements
+        insertPathLink(cur, path, dhid_from, dhid_to)
+    
 
 def insertPGSQL(cur, insertRoutes, start, stop, path_counter):
     # PPR can return multiple possible paths for one connection:
@@ -166,7 +177,7 @@ def insertPGSQL(cur, insertRoutes, start, stop, path_counter):
         insertPathsElementsRef(cur, edges, path_counter)
         insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
         
-        identifyAccessSpaces(cur, edges, relation_id, start["IFOPT"], stop["IFOPT"])
+        createPathNetwork(cur, path, edges, relation_id, start["IFOPT"], stop["IFOPT"])
 
 
 def makeRequest(url, payload, start, stop):

@@ -532,7 +532,7 @@ CREATE OR REPLACE VIEW final_access_spaces AS (
   SELECT ptr.relation_id, acc.*
   FROM access_spaces acc
   JOIN stop_areas_members_ref ptr
-    ON acc.osm_id = ptr.member_id
+    ON acc.osm_id = ptr.member_id AND ptr.osm_type = 'N'
 );
 
 
