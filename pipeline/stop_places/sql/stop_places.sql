@@ -322,12 +322,12 @@ $$
 BEGIN
   IF tags->>'level' IS NULL
   THEN
-    RETURN 0;
+    RETURN 0.0;
   ELSE
     BEGIN
-      RETURN SPLIT_PART($1->>'level', ';', 1)::NUMERIC;
+      RETURN SPLIT_PART($1->>'level', ';', 1)::NUMERIC(4,1);
     EXCEPTION WHEN OTHERS THEN
-      RETURN 0;
+      RETURN 0.0;
     END;
   END IF;
 END;
@@ -517,8 +517,8 @@ CREATE OR REPLACE VIEW final_entrances AS (
  * Create view that matches all access spaces to public transport areas
  */
 CREATE OR REPLACE VIEW final_access_spaces AS (
-  SELECT ptr.relation_id, acc.*
-  FROM access_spaces acc
+  SELECT *
+  FROM access_spaces
 );
 
 
@@ -803,9 +803,10 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           )
         )
       ))
+      -- <accessSpaces>
       WHEN ex.category = 'ACCESS_SPACE' THEN xmlelement(name "accessSpaces", (
         xmlagg(
-          -- <Parking>
+          -- <AccessSpace>
           xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
             ex_keyList(ex.tags),

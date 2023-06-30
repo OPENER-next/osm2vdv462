@@ -52,13 +52,13 @@ def insertPathLink(cur, pathLink, id_from, id_to):
     )
     
 
-def insertAccessSpaces(cur, osm_id, level, DHID, tags, geom):
+def insertAccessSpaces(cur, osm_id, relation_id, level, DHID, tags, geom):
     geomString = "POINT(" + str(geom[0]) + " " + str(geom[1]) + ")"
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
-            'INSERT INTO access_spaces (osm_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
-            (osm_id, level, DHID, tags, geomString)
+            'INSERT INTO access_spaces (osm_id, relation_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
+            (osm_id, relation_id, level, DHID, tags, geomString)
         )
     except Exception as e:
         exit(e)
@@ -128,7 +128,7 @@ def createAccessSpace(cur, currentEdge, previousEdge, relation_id):
     # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
     newDHID = str(relation_id) + "_" + str(currentEdge["from_node_osm_id"]) + ":" + (str(current_level) if current_level != None else "")
     
-    insertAccessSpaces(cur, currentEdge["from_node_osm_id"], current_level, newDHID, None, currentEdge["path"][0])
+    insertAccessSpaces(cur, currentEdge["from_node_osm_id"], relation_id, current_level, newDHID, None, currentEdge["path"][0])
     
     return newDHID
 
