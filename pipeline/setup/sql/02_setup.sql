@@ -37,14 +37,15 @@ CREATE TABLE paths (
 
 /* 
  * Create paths_elements_ref table:
- * Reference table for paths to osm elements (id and type)
- * A path is likely composed of multiple OSM elements and an OSM element can be used in multiple paths.
+ * Reference table for path links to osm elements. A path link is likely composed of multiple OSM elements.
+ * Nodes, ways and areas are stored in separate arrays to be able to query them separately.
  * This table will be filled in the "routing" step of the pipeline.
  */
 CREATE TABLE paths_elements_ref (
-  path_id INT,
-  osm_type CHAR(1),
-  osm_id INT
+  path_id INT PRIMARY KEY,
+  nodes BIGINT[],
+  ways INT[],
+  areas INT[]
 );
 
 
@@ -54,7 +55,7 @@ CREATE TABLE paths_elements_ref (
  * This table will be filled in the "routing" step of the pipeline.
  */
 CREATE TABLE path_links (
-  path_id INT,
+  path_id SERIAL,
   smaller_node_id TEXT,
   bigger_node_id TEXT,
   geom GEOMETRY,
