@@ -1,0 +1,26 @@
+name: NeTEx Schema Validation
+
+on:
+  push:
+  pull_request:
+
+  # Allow running this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout osm2vdv462
+        uses: actions/checkout@v3
+        with:
+          path: osm2vdv462
+        
+      - name: Checkout NeTEx XSD
+        uses: actions/checkout@v3
+        with:
+          repository: NeTEx-CEN/NeTEx
+          path: NeTEx
+
+      - name: Validate examples against NeTEx XSD
+        run: xmllint --noout --schema NeTEx/xsd/NeTEx_publication.xsd osm2vdv462/example_export.xml
