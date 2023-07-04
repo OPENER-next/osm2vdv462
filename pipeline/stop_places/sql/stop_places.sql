@@ -753,7 +753,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
       SELECT xmlagg(
         -- <Level>
         xmlelement(name "Level",
-          xmlattributes(create_LevelId(ex.relation_id, key::NUMERIC) AS "id"),
+          xmlattributes(create_LevelId(ex.relation_id, key::NUMERIC) AS "id", 'any' AS "version"),
           -- <ShortName>
           xmlelement(name "ShortName", COALESCE(value, key))
         )
