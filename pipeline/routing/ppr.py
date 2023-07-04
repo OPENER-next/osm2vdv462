@@ -5,20 +5,10 @@ import json
 import os
 
 def truncateTables(conn, cur):
-    cur.execute('TRUNCATE TABLE paths')
     cur.execute('TRUNCATE TABLE paths_elements_ref')
     cur.execute('TRUNCATE TABLE path_links')
     cur.execute('TRUNCATE TABLE access_spaces')
     conn.commit()
-
-
-def insertPath(cur, relation_id, dhid_from, dhid_to, path):
-    stepList = [f"{step[0]} {step[1]}" for step in path]
-    linestring = "LINESTRING(" + ",".join(stepList) + ")"
-    cur.execute(
-        'INSERT INTO paths (stop_area_relation_id, "from", "to", geom) VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326))',
-        (relation_id, dhid_from, dhid_to, linestring)
-    )
 
 
 def updatePathsElementsRef(cur, osmId, pathId, nodes=False, ways=False, areas=False):
@@ -105,7 +95,7 @@ def insertPathsElementsRef(cur, pathId, edges):
             updatePathsElementsRef(cur, abs(edge["osm_way_id"]), pathId, nodes=True)
 
 
-def insertPathLink(cur, pathLink, id_from, id_to):
+def insertPathLink(cur, relation_id, pathLink, id_from, id_to):
     edgeList = [f"{edge[0]} {edge[1]}" for edge in pathLink]
     linestring = "LINESTRING(" + ",".join(edgeList) + ")"
     
@@ -119,8 +109,8 @@ def insertPathLink(cur, pathLink, id_from, id_to):
     # use 'INSERT INTO ... ON CONFLICT DO NOTHING' to avoid duplicate entries
     # 'RETURNING path_id' returns the generated path_id
     cur.execute(
-        'INSERT INTO path_links (smaller_node_id, bigger_node_id, geom) VALUES (%s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING RETURNING path_id',
-        (smaller_node_id, bigger_node_id, linestring)
+        'INSERT INTO path_links (stop_area_relation_id, smaller_node_id, bigger_node_id, geom) VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING RETURNING path_id',
+        (relation_id, smaller_node_id, bigger_node_id, linestring)
     )
     
     path_id = cur.fetchone()
@@ -230,7 +220,7 @@ def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
         
         if requiresAccessSpace(previousEdge, edge): # checks whether the given parameters need the creation of an access space
             newDHID = createAccessSpace(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space
-            pathId = insertPathLink(cur, pathLink, previousDHID, newDHID)
+            pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID)
             if pathId:
                 insertPathsElementsRef(cur, pathId, pathLinkEdges)
             pathLink = edge["path"] # create a new pathLink consisting of the current edge
@@ -245,7 +235,7 @@ def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
         
     if not accessSpaceCreated:
         # no access space was created, so insert the full PPR path between the two stop_area_elements
-        pathId = insertPathLink(cur, path, dhid_from, dhid_to)
+        pathId = insertPathLink(cur, relation_id, path, dhid_from, dhid_to)
         if pathId:
             insertPathsElementsRef(cur, pathId, pathLinkEdges)
     
@@ -258,8 +248,6 @@ def insertPGSQL(cur, insertRoutes, start, stop):
         # distance = route["distance"]
         relation_id = stop["relation_id"]
 
-        insertPath(cur, relation_id, start["IFOPT"], stop["IFOPT"], path)
-        
         createPathNetwork(cur, path, edges, relation_id, start["IFOPT"], stop["IFOPT"])
 
 
@@ -293,7 +281,7 @@ def main():
     # Open a cursor to perform database operations
     cur = conn.cursor(cursor_factory=DictCursor)
     
-    # Truncate paths and paths_elements_ref table (delete all rows from previous runs)
+    # Truncate tables (delete all rows from previous runs)
     truncateTables(conn, cur)
 
     url = 'http://' + os.environ['host_ppr'] + ':8000/api/route'

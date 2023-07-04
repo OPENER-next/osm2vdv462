@@ -575,12 +575,12 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
 
 /*
  * Final site path link view
- * Currently this is just a wrapper of the "paths" table.
- * TODO: JOIN "paths" with "paths_elements_ref" and "highways" GROUP BY "path_id" and somehow aggregate tags
+ * Currently this is just a wrapper of the "path_links" table.
+ * TODO: JOIN "path_links" with "paths_elements_ref" and "highways" GROUP BY "path_id" and somehow aggregate tags
  */
 CREATE OR REPLACE VIEW final_site_path_links AS (
-  SELECT stop_area_relation_id AS relation_id, id::text, '{}'::jsonb AS tags, geom, "from", "to"
-  FROM paths
+  SELECT stop_area_relation_id AS relation_id, path_id::text as id, '{}'::jsonb AS tags, geom, smaller_node_id as "from", bigger_node_id as "to"
+  FROM path_links
 );
 
 
