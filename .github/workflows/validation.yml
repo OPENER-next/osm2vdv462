@@ -15,12 +15,15 @@ jobs:
         uses: actions/checkout@v3
         with:
           path: osm2vdv462
-        
+
       - name: Checkout NeTEx XSD
         uses: actions/checkout@v3
         with:
           repository: NeTEx-CEN/NeTEx
           path: NeTEx
+
+      - name: Install xmllint
+        run: sudo apt install libxml2-utils
 
       - name: Validate examples against NeTEx XSD
         run: xmllint --noout --schema NeTEx/xsd/NeTEx_publication.xsd osm2vdv462/example_export.xml
