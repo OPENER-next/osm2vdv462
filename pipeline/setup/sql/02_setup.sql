@@ -55,6 +55,7 @@ CREATE TABLE path_links (
  * Create category type:
  * Enum type named "category" to account for the different types of stop place elements.
  * Used in the "routing" and the "export" step of the pipeline.
+ * The order is important as it is used to sort/order the different categories later in the export.
  */
 CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
 
