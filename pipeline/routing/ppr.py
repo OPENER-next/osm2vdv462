@@ -125,7 +125,7 @@ def insertAccessSpaces(cur, osm_id, relation_id, level, DHID, tags, geom):
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
-            'INSERT INTO access_spaces (osm_id, relation_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
+            'INSERT INTO access_spaces (osm_id, relation_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, trim_scale(%s), %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
             (osm_id, relation_id, level, DHID, tags, geomString)
         )
     except Exception as e:

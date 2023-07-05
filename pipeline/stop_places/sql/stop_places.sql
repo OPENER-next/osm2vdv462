@@ -322,12 +322,12 @@ $$
 BEGIN
   IF tags->>'level' IS NULL
   THEN
-    RETURN 0.0;
+    RETURN 0;
   ELSE
     BEGIN
-      RETURN SPLIT_PART($1->>'level', ';', 1)::NUMERIC(4,1);
+      RETURN TRIM_SCALE(SPLIT_PART($1->>'level', ';', 1)::NUMERIC);
     EXCEPTION WHEN OTHERS THEN
-      RETURN 0.0;
+      RETURN 0;
     END;
   END IF;
 END;
