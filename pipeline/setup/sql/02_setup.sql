@@ -28,10 +28,11 @@ CREATE TABLE organisations (
  * This table will be filled in the "routing" step of the pipeline.
  */
 CREATE TABLE paths_elements_ref (
-  path_id INT PRIMARY KEY,
-  nodes BIGINT[],
-  ways INT[],
-  areas INT[]
+  path_id INT,
+  osm_type CHAR(1),
+  osm_id BIGINT,
+  -- constraint used to filter potential duplicated entries inside the same path
+  CONSTRAINT check_unique UNIQUE (path_id, osm_type, osm_id)
 );
 
 
@@ -43,11 +44,10 @@ CREATE TABLE paths_elements_ref (
 CREATE TABLE path_links (
   path_id SERIAL,
   stop_area_relation_id INT,
-  smaller_node_id TEXT,
-  bigger_node_id TEXT,
+  start_node_id TEXT,
+  end_node_id TEXT,
   geom GEOMETRY,
-  CONSTRAINT PK_node PRIMARY KEY (smaller_node_id,bigger_node_id),
-  CONSTRAINT ids_check CHECK (smaller_node_id < bigger_node_id)
+  CONSTRAINT PK_node PRIMARY KEY (start_node_id,end_node_id)
 );
 
 
