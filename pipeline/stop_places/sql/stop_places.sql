@@ -760,10 +760,12 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
       )
       FROM jsonb_each_text(ex.levels)
     )),
-    xmlagg(ex.xml_children)
+    -- ORDER BY is important for NeTEx validity
+    -- Quays, AccessSpaces, Entrances & Parkings should come first while the SitePathLinks should be the last
+    xmlagg(ex.xml_children ORDER BY ex.category ASC)
   )
   FROM (
-    SELECT ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id, ex.levels,
+    SELECT ex.category, ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id, ex.levels,
     CASE
       -- <quays>
       WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
@@ -861,8 +863,6 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
     END AS xml_children
     FROM export_data ex
     GROUP BY ex.category, ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id, ex.levels
-    -- important for NeTEx validity, Quays should come first while the SitePathLinks should be the last
-    ORDER BY ex.category ASC
   ) AS ex
   GROUP BY ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id, ex.levels
 );
