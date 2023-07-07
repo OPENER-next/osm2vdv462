@@ -163,10 +163,7 @@ def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
     pathLink = firstEdge["path"]
     pathLinkEdges = [firstEdge] # all edges that are part of the pathLink
     
-    for i in range(len(edges) - 1): # the first edge is already handled
-        edge = next(edgeIter)
-        pathLinkEdges.append(edge)
-        
+    for edge in edgeIter:
         if requiresAccessSpace(previousEdge, edge): # checks whether the given parameters need the creation of an access space
             newDHID = insertAccessSpaces(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space
             pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID)
@@ -181,12 +178,16 @@ def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
             pathLink.extend(edge["path"][1:])
 
         previousEdge = edge
-        
-    if not accessSpaceCreated:
+    
+    if accessSpaceCreated:
+        # the last part of the path is not inserted yet (between the last access space and the stop_area_element 'dhid_to')
+        pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, dhid_to)
+    else:
         # no access space was created, so insert the full PPR path between the two stop_area_elements
         pathId = insertPathLink(cur, relation_id, path, dhid_from, dhid_to)
-        if pathId:
-            getPathsElementsRef(cur, pathId, pathLinkEdges)
+        
+    if pathId:
+        getPathsElementsRef(cur, pathId, pathLinkEdges)
     
 
 def insertPGSQL(cur, insertRoutes, start, stop):
