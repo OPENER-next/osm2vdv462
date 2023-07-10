@@ -10,6 +10,7 @@ volumes:
   postgis:
   ppr:
   pgadmin:
+  python:
 
 services:
   osm2vdv462_postgis:
@@ -34,7 +35,7 @@ services:
     hostname: osm2vdv462_postgis
     healthcheck: # test if the database is ready to accept connections
       test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
-      interval: 5s
+      interval: 10s
       timeout: 1s
       retries: 5
 
@@ -43,9 +44,9 @@ services:
     volumes:
       - "ppr:/data"
       # a placeholder path must be set when "IMPORT_FILE_PATH" is empty, otherwise there will be an error decoding the compose project
-      # the current path is used as the fallback host bind mount location: ":-${PWD}"
+      # the current path is used as the fallback host bind mount location: ":-$PWD"
       # see: "Shell Parameter Expansion"
-      - "${IMPORT_FILE_PATH:-${PWD}}:/data/input/${IMPORT_FILE}"
+      - "${IMPORT_FILE_PATH:-$PWD}:/data/input/${IMPORT_FILE}"
     command: "/ppr/ppr-preprocess --osm /data/input/${IMPORT_FILE} --graph /data/germany.ppr"
     container_name: osm2vdv462_ppr_preprocess
     profiles:
@@ -64,6 +65,8 @@ services:
     restart: unless-stopped
     command: "/ppr/ppr-backend -c /data/config.ini"
     container_name: osm2vdv462_ppr_backend
+    profiles:
+      - ppr_backend
     user: root
 
   osm2vdv462_python:
@@ -82,6 +85,10 @@ services:
     networks:
       - ${DOCKER_NETWORK}
     hostname: osm2vdv462_python
+    volumes:
+      - "python:/app"
+      - "${PWD}/pipeline/routing/ppr.py:/app/ppr.py"
+      - "${PWD}/pipeline/routing/config/profiles/:/app/profiles/"
 
   osm2vdv462_pgadmin4:
     image: dpage/pgadmin4
@@ -108,7 +115,7 @@ services:
     container_name: osm2vdv462_osm2pgsql
     volumes:
       - "${PWD}/pipeline/stop_places/lua:/scripts/osm2pgsql"
-      - "${IMPORT_FILE_PATH:-${PWD}}:/input/${IMPORT_FILE}"
+      - "${IMPORT_FILE_PATH:-$PWD}:/input/${IMPORT_FILE}"
     environment:
       PGHOST: osm2vdv462_postgis
       PGDATABASE: ${PGDATABASE}

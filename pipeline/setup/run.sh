@@ -17,8 +17,8 @@ read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
   read -p "Enter the OSM file(s) that should be imported: " IMPORT_FILE_PATH
   if ! [ -f $IMPORT_FILE_PATH ]; then
-    echo "File does not exist. Quitting ..."
-    exit 1
+    echo "File does not exist."
+    return 1
   fi
 
   export IMPORT_FILE_PATH
