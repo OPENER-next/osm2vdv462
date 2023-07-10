@@ -10,6 +10,7 @@ volumes:
   postgis:
   ppr:
   pgadmin:
+  python:
 
 services:
   osm2vdv462_postgis:
@@ -84,6 +85,10 @@ services:
     networks:
       - ${DOCKER_NETWORK}
     hostname: osm2vdv462_python
+    volumes:
+      - "python:/app"
+      - "${PWD}/pipeline/routing/ppr.py:/app/ppr.py"
+      - "${PWD}/pipeline/routing/config/profiles/:/app/profiles/"
 
   osm2vdv462_pgadmin4:
     image: dpage/pgadmin4
