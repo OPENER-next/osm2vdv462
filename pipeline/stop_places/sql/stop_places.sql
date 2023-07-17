@@ -512,6 +512,25 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/*
+ * Create a NumerOfSteps element based on the tags: highway=steps and step_count.
+ * The input "tags" should be a single JSONB element (no array).
+ * Returns null when no tag matching exists
+*/
+CREATE OR REPLACE FUNCTION ex_NumberOfSteps(tags jsonb) RETURNS xml AS
+$$
+SELECT
+  CASE
+    WHEN $1->>'highway' = 'steps' AND $1->>'step_count' IS NOT NULL THEN xmlelement(
+      name "NumberOfSteps",
+      $1->>'step_count'
+    )
+    ELSE NULL
+  END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
 /*********
  * QUAYS *
  *********/
@@ -899,7 +918,9 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <From> <To>
             ex_FromTo(ex.from, ex.to),
             -- <AccessFeatureType>
-            ex_AccessFeatureType(ex.tags)
+            ex_AccessFeatureType(ex.tags),
+            -- <NumberOfSteps>
+            ex_NumberOfSteps(ex.tags)
           )
         )
       ))
