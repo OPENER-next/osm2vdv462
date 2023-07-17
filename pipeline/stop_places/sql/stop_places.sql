@@ -479,6 +479,39 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/*
+ * Create a AccessFeatureType element based on a variety of tags.
+ * The input "tags" should be a single JSONB element (no array).
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_AccessFeatureType(tags jsonb) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+    IF tags->>'highway' = 'steps' AND
+      tags->>'conveying' IS NULL
+      THEN result := 'stairs';
+    ELSEIF tags->>'highway' = 'elevator'
+      THEN result := 'lift';
+    ELSEIF tags->>'highway' = 'steps' AND
+          tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible')
+      THEN result := 'escalator';
+    ELSEIF tags->>'highway' = 'footway' AND
+          tags->>'incline' IS NOT NULL
+      THEN result := 'ramp';
+    END IF;
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "AccessFeatureType", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
 /*********
  * QUAYS *
  *********/
@@ -575,12 +608,20 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
 
 /*
  * Final site path link view
- * Currently this is just a wrapper of the "path_links" table.
- * TODO: JOIN "path_links" with "paths_elements_ref" and "highways" GROUP BY "path_id" and somehow aggregate tags
+ * The tables "paths_elements_ref" and "highways" are joined to create a view that contains all path links with their osm tags.
+ * Only one element of the "paths_elements_ref" table is joined to be able to later generate the xml field "accessFeatureType".
+ * There should be no case where an access feature (stairs, ...) is composed of multiple OSM elements.
  */
 CREATE OR REPLACE VIEW final_site_path_links AS (
-  SELECT stop_area_relation_id AS relation_id, path_id::text as id, '{}'::jsonb AS tags, geom, start_node_id as "from", end_node_id as "to"
-  FROM path_links
+  -- use distinct to filter any duplicated joined paths
+  SELECT DISTINCT ON (pl.path_id)
+    -- fallback to empty tags if no matching element exists
+    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(highways.tags, '{}'::jsonb) as tags, pl.geom, start_node_id as "from", end_node_id as "to"
+  FROM path_links pl
+  LEFT JOIN paths_elements_ref per
+    ON per.path_id = pl.path_id 
+  LEFT JOIN highways
+    ON highways.osm_id = per.osm_id AND highways.osm_type = per.osm_type
 );
 
 
@@ -856,7 +897,9 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <LineString>
             ex_LineString(ex.geom, ex.id),
             -- <From> <To>
-            ex_FromTo(ex.from, ex.to)
+            ex_FromTo(ex.from, ex.to),
+            -- <AccessFeatureType>
+            ex_AccessFeatureType(ex.tags)
           )
         )
       ))
