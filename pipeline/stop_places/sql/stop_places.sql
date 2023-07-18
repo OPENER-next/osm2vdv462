@@ -516,7 +516,7 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * Create a NumerOfSteps element based on the tags: highway=steps and step_count.
  * The input "tags" should be a single JSONB element (no array).
  * Returns null when no tag matching exists
-*/
+ */
 CREATE OR REPLACE FUNCTION ex_NumberOfSteps(tags jsonb) RETURNS xml AS
 $$
 SELECT
@@ -529,6 +529,57 @@ SELECT
   END
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a function, that converts a duration string to the xsd:duration format.
+ * Returns null when no duration can be parsed
+ */
+CREATE OR REPLACE FUNCTION duration_to_xsd_duration(duration text) RETURNS text AS
+$$
+BEGIN
+  -- check if the duration text only consists of numbers --> special case for minutes
+  IF duration ~ '^[0-9]+$' THEN
+    RETURN (duration || ' minutes')::INTERVAL;
+  ELSE
+    BEGIN
+      RETURN duration::INTERVAL;
+    EXCEPTION
+      WHEN invalid_datetime_format THEN
+        -- conversion failed
+        RETURN NULL;
+    END;
+  END IF;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Create a TransferDuration element based on the tags: duration.
+ * The duration is saved in the xsd:duration format.
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_TransferDuration(tags jsonb) RETURNS xml AS
+$$
+DECLARE
+  duration interval;
+BEGIN
+  duration := duration_to_xsd_duration($1->>'duration');
+  IF duration IS NOT NULL THEN
+    RETURN xmlelement(
+      name "TransferDuration",
+      xmlelement(
+        name "DefaultDuration",
+        duration
+      )
+    );
+  ELSE
+    RETURN NULL;
+  END IF;
+END;
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*********
@@ -920,7 +971,9 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <AccessFeatureType>
             ex_AccessFeatureType(ex.tags),
             -- <NumberOfSteps>
-            ex_NumberOfSteps(ex.tags)
+            ex_NumberOfSteps(ex.tags),
+            -- <TransferDuration>
+            ex_TransferDuration(ex.tags)
           )
         )
       ))
