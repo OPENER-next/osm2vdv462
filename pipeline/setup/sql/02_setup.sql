@@ -40,14 +40,20 @@ CREATE TABLE paths_elements_ref (
  * Table for the elemental path links between nodes.
  * Nodes can be stop_area_elements (IFOPT from OSM) and access_spaces (IFOPT generated in the "routing" step).
  * This table will be filled in the "routing" step of the pipeline.
+ * Note that the path_id will be incremented even if the CONSTRAINT check_unique_2 is violated.
+ * So there will be gaps in the path_id sequence.
+ * See: https://stackoverflow.com/questions/37204749/serial-in-postgres-is-being-increased-even-though-i-added-on-conflict-do-nothing
  */
 CREATE TABLE path_links (
-  path_id SERIAL,
+  path_id SERIAL PRIMARY KEY,
   stop_area_relation_id INT,
   start_node_id TEXT,
   end_node_id TEXT,
   geom GEOMETRY,
-  CONSTRAINT PK_node PRIMARY KEY (start_node_id,end_node_id)
+  -- constraint used to filter potential duplicated path links
+  -- include geom column because in rare cases the start & end node can be identical for different path links
+  -- e.g. when stairs and escelators start and end at the same nodes.
+  CONSTRAINT check_unique_2 UNIQUE (start_node_id, end_node_id, geom)
 );
 
 

@@ -8,7 +8,8 @@ ALTER DATABASE osm2vdv462 SET export.LANGUAGE TO 'de';
 ALTER DATABASE osm2vdv462 SET export.PROJECTION TO 4326;
 -- Set the default timezone to Europe/Berlin
 ALTER DATABASE osm2vdv462 SET TIMEZONE TO 'Europe/Berlin';
-
+-- Set the default intervalstyle to iso_8601 (xsd:duration)
+ALTER DATABASE osm2vdv462 SET intervalstyle = 'iso_8601';
 
 -- Enable PostGIS
 CREATE EXTENSION IF NOT EXISTS postgis;
