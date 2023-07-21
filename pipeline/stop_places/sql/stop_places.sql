@@ -533,6 +533,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 /*
  * Create a function, that converts a duration string to the xsd:duration format.
+ * The output format is globally set to iso_8601 in the setup pipeline step.
  * Returns null when no duration can be parsed
  */
 CREATE OR REPLACE FUNCTION duration_to_xsd_duration(duration text) RETURNS text AS
@@ -555,28 +556,45 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/* 
+ * Create a function, that estimates the duration based on the length of the path link.
+ * The seconds are rounded up to the next integer.
+ */
+CREATE OR REPLACE FUNCTION estimateDuration(geo geometry, walking_speed NUMERIC) RETURNS INTERVAL AS
+$$
+DECLARE
+  duration interval;
+BEGIN
+  duration := (ST_Length(
+      ST_Transform($1, current_setting('export.PROJECTION')::int)::geography
+    )::NUMERIC / walking_speed)::INT;
+  RETURN duration;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
 /*
  * Create a TransferDuration element based on the tags: duration.
+ * If no duration tag is present, the duration is calculated from the length of the path link.
  * The duration is saved in the xsd:duration format.
- * Returns null when no tag matching exists
  */
-CREATE OR REPLACE FUNCTION ex_TransferDuration(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_TransferDuration(tags jsonb, geo geometry) RETURNS xml AS
 $$
 DECLARE
   duration interval;
 BEGIN
   duration := duration_to_xsd_duration($1->>'duration');
-  IF duration IS NOT NULL THEN
-    RETURN xmlelement(
-      name "TransferDuration",
-      xmlelement(
-        name "DefaultDuration",
-        duration
-      )
-    );
-  ELSE
-    RETURN NULL;
+  IF duration IS NULL THEN
+    duration := estimateDuration($2, 1.4);
   END IF;
+  RETURN xmlelement(
+    name "TransferDuration",
+    xmlelement(
+      name "DefaultDuration",
+      duration
+    )
+  );
 END;
 $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
@@ -973,7 +991,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <NumberOfSteps>
             ex_NumberOfSteps(ex.tags),
             -- <TransferDuration>
-            ex_TransferDuration(ex.tags)
+            ex_TransferDuration(ex.tags, ex.geom)
           )
         )
       ))
