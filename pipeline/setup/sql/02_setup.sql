@@ -39,6 +39,7 @@ CREATE TABLE paths_elements_ref (
 /* Create path_links table:
  * Table for the elemental path links between nodes.
  * Nodes can be stop_area_elements (IFOPT from OSM) and access_spaces (IFOPT generated in the "routing" step).
+ * The level column is used to store the number of passed levels between the start and end node.
  * This table will be filled in the "routing" step of the pipeline.
  * Note that the path_id will be incremented even if the CONSTRAINT check_unique_2 is violated.
  * So there will be gaps in the path_id sequence.
@@ -49,6 +50,7 @@ CREATE TABLE path_links (
   stop_area_relation_id INT,
   start_node_id TEXT,
   end_node_id TEXT,
+  level NUMERIC,
   geom GEOMETRY,
   -- constraint used to filter potential duplicated path links
   -- include geom column because in rare cases the start & end node can be identical for different path links

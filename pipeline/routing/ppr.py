@@ -56,15 +56,15 @@ def insertPathsElementsRef(cur, pathId, edges):
                 insertPathsElementsRefSQL(cur, pathId, 'W', abs(edge["osm_way_id"]))
 
 
-def insertPathLink(cur, relation_id, pathLink, id_from, id_to):
+def insertPathLink(cur, relation_id, pathLink, id_from, id_to, level):
     edgeList = [f"{edge[0]} {edge[1]}" for edge in pathLink]
     linestring = "LINESTRING(" + ",".join(edgeList) + ")"
         
     # use 'INSERT INTO ... ON CONFLICT DO NOTHING' to avoid duplicate entries
     # 'RETURNING path_id' returns the generated path_id
     cur.execute(
-        'INSERT INTO path_links (stop_area_relation_id, start_node_id, end_node_id, geom) VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING RETURNING path_id',
-        (relation_id, id_from, id_to, linestring)
+        'INSERT INTO path_links (stop_area_relation_id, start_node_id, end_node_id, geom, level) VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326), %s) ON CONFLICT DO NOTHING RETURNING path_id',
+        (relation_id, id_from, id_to, linestring, level)
     )
     
     path_id = cur.fetchone()
@@ -100,7 +100,7 @@ def insertAccessSpaces(cur, currentEdge, previousEdge, relation_id):
     except Exception as e:
         exit(e)
 
-    return newDHID
+    return newDHID, current_level
 
 
 def requiresAccessSpace(currentEdge, previousEdge):
@@ -150,12 +150,13 @@ def requiresAccessSpace(currentEdge, previousEdge):
     return False
         
 
-def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
-    accessSpaceCreated = False
+def createPathNetwork(cur, edges, relation_id, dhid_from, dhid_to):
     edgeIter = iter(edges)
     firstEdge = next(edgeIter)
     previousEdge = firstEdge
     previousDHID = dhid_from
+    fromLevel = firstEdge["level"]
+    toLevel = firstEdge["level"]
     
     # create 'pathLink' that will be inserted into the database
     # - a pathLink is a list of two nodes (stop_area_element and/or access_space), that are connected by one or multiple edges
@@ -165,23 +166,25 @@ def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
     
     for edge in edgeIter:
         if requiresAccessSpace(previousEdge, edge): # checks whether the given parameters need the creation of an access space
-            newDHID = insertAccessSpaces(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space
-            pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID)
+            newDHID, toLevel = insertAccessSpaces(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space and the level of the access space
+            pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID, abs(fromLevel - toLevel))
             if pathId:
                 insertPathsElementsRef(cur, pathId, pathLinkEdges)
             pathLink = edge["path"] # create a new pathLink consisting of the current edge
             pathLinkEdges = [edge]
             previousDHID = newDHID
+            fromLevel = toLevel
         else:
             # append all but the first node of the edge, because the first node is the same as the last node of the previous edge
             # use extend, because there can be multiple nodes in the edge (polyline)
             pathLink.extend(edge["path"][1:])
             pathLinkEdges.append(edge)
+            toLevel = edge["level"]
 
         previousEdge = edge
     
     # the last part of the path is not inserted yet (between the last access space and the stop_area_element 'dhid_to')
-    pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, dhid_to)
+    pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, dhid_to, abs(fromLevel - toLevel))
         
     if pathId:
         insertPathsElementsRef(cur, pathId, pathLinkEdges)
@@ -190,12 +193,11 @@ def createPathNetwork(cur, path, edges, relation_id, dhid_from, dhid_to):
 def insertPGSQL(cur, insertRoutes, start, stop):
     # PPR can return multiple possible paths for one connection:
     for route in insertRoutes:
-        path = route["path"]
         edges = route["edges"]
         # distance = route["distance"]
         relation_id = stop["relation_id"]
 
-        createPathNetwork(cur, path, edges, relation_id, start["IFOPT"], stop["IFOPT"])
+        createPathNetwork(cur, edges, relation_id, start["IFOPT"], stop["IFOPT"])
 
 
 def makeRequest(url, payload, start, stop):

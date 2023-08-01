@@ -536,7 +536,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * The output format is globally set to iso_8601 in the setup pipeline step.
  * Returns null when no duration can be parsed
  */
-CREATE OR REPLACE FUNCTION duration_to_xsd_duration(duration text) RETURNS text AS
+CREATE OR REPLACE FUNCTION extract_duration(duration text) RETURNS INTERVAL AS
 $$
 BEGIN
   -- check if the duration text only consists of numbers --> special case for minutes
@@ -557,21 +557,26 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /* 
- * Create a function, that estimates the duration based on the length of the path link.
- * The seconds are rounded up to the next integer.
+ * Create a function, that estimates the duration in seconds based on the length of the path link.
+ * Returns the seconds as integer (rounded up to the next integer).
+ * Special case elevator: the duration is estimated based on the number of levels that are passed.
  */
-CREATE OR REPLACE FUNCTION estimateDuration(geo geometry, walking_speed NUMERIC) RETURNS INTERVAL AS
+CREATE OR REPLACE FUNCTION estimate_duration(tags jsonb, geo geometry, level NUMERIC, walking_speed NUMERIC) RETURNS INTEGER AS
 $$
-DECLARE
-  duration interval;
-BEGIN
-  duration := (ST_Length(
-      ST_Transform($1, current_setting('export.PROJECTION')::int)::geography
-    )::NUMERIC / walking_speed)::INT;
-  RETURN duration;
-END
+SELECT
+  CASE
+    WHEN tags->>'highway' = 'elevator' THEN
+      CASE
+        WHEN level = 0 THEN 60 -- return 60 seconds as a fallback
+        ELSE (30 + level * 10)::INT -- estimation: 10 seconds per level plus 30 seconds for entering and leaving the elevator
+      END
+    ELSE
+      (ST_Length(
+        ST_Transform(geo, current_setting('export.PROJECTION')::INT)::geography
+      ) / walking_speed)::INT
+  END
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
@@ -579,14 +584,15 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * If no duration tag is present, the duration is calculated from the length of the path link.
  * The duration is saved in the xsd:duration format.
  */
-CREATE OR REPLACE FUNCTION ex_TransferDuration(tags jsonb, geo geometry) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_TransferDuration(tags jsonb, geo geometry, level NUMERIC) RETURNS xml AS
 $$
 DECLARE
   duration interval;
 BEGIN
-  duration := duration_to_xsd_duration($1->>'duration');
+  duration := extract_duration($1->>'duration');
   IF duration IS NULL THEN
-    duration := estimateDuration($2, 1.4);
+    -- the returned integer value is automatically converted to 'interval'
+    duration := estimate_duration($1, $2, $3, 1.4);
   END IF;
   RETURN xmlelement(
     name "TransferDuration",
@@ -704,7 +710,7 @@ CREATE OR REPLACE VIEW final_site_path_links AS (
   -- use distinct to filter any duplicated joined paths
   SELECT DISTINCT ON (pl.path_id)
     -- fallback to empty tags if no matching element exists
-    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(highways.tags, '{}'::jsonb) as tags, pl.geom, start_node_id as "from", end_node_id as "to"
+    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(highways.tags, '{}'::jsonb) as tags, pl.geom, pl.level, start_node_id as "from", end_node_id as "to"
   FROM path_links pl
   LEFT JOIN paths_elements_ref per
     ON per.path_id = pl.path_id 
@@ -849,7 +855,7 @@ CREATE OR REPLACE VIEW export_data AS (
     UNION ALL
       SELECT
         'SITE_PATH_LINK'::category AS category, relation_id,
-        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, NULL AS "level", pat.from AS "from", pat.to AS "to"
+        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat."level" AS "level", pat.from AS "from", pat.to AS "to"
       FROM final_site_path_links pat
   ) stop_elements
   INNER JOIN final_stop_places pta
@@ -991,7 +997,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <NumberOfSteps>
             ex_NumberOfSteps(ex.tags),
             -- <TransferDuration>
-            ex_TransferDuration(ex.tags, ex.geom)
+            ex_TransferDuration(ex.tags, ex.geom, ex.level)
           )
         )
       ))
