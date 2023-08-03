@@ -1,15 +1,9 @@
 # Optionally run the PPR preprocessing
-read -p "Do you want to (re)run the routing preprocessing? (y/n) " RUN_PREPROCESSING
-  #if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ]; then
-    #docker pull ghcr.io/motis-project/ppr:edge
-    #docker run -u root --rm -it -v data:/data -v $IMPORT_FILE:/data/$(basename "$IMPORT_FILE") ghcr.io/motis-project/ppr:edge /ppr/ppr-preprocess --osm /data/$(basename "$IMPORT_FILE") --graph /data/germany.ppr
-
-    # alternatively, if [elevation data](https://github.com/motis-project/ppr/wiki/Elevation-Data-(DEM)) is used:
-    # docker run -u root --rm -it -v data:/data -v $IMPORT_FILE:/data/$(basename "$IMPORT_FILE") ghcr.io/motis-project/ppr:edge -v /path/to/srtm:/srtm /ppr/ppr-preprocess --osm /data/$(basename "$IMPORT_FILE") --graph /data/germany.ppr --dem /srtm
-  #fi
-
-if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ]; then
-  if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
+if [ "$RUN_PREPROCESSING" = "y" ] ||
+   [ "$RUN_PREPROCESSING" = "Y" ] ||
+   [ "$PARAMETER_PREPROCESSING" = "True" ] ||
+   [ "$PARAMETER_PREPROCESSING" = "true" ]; then
+  if [ "$IMPORT_FILE_PATH" != "" ]; then
     docker-compose up osm2vdv462_ppr_preprocess
 
     exit_status=$(docker inspect osm2vdv462_ppr_preprocess --format='{{.State.ExitCode}}')
@@ -39,13 +33,15 @@ else
   docker-compose up -d osm2vdv462_ppr_backend
 fi
 
+echo "Waiting for PPR container to start ..."
+sleep 10
+
 # perform healthcheck on the PPR container and wait until the routing graph is loaded
 # it is not possible to do this in docker compose, because the container would need a tool like curl or wget to perform the healthcheck
 
 # check the current status of the container
 if ! [ "$(docker inspect -f '{{.State.Status}}' osm2vdv462_ppr_backend)" = "running" ]; then
   # wait 10 seconds and check again
-  echo "Waiting for PPR container to start ..."
   sleep 10
   if ! [ "$(docker inspect -f '{{.State.Status}}' osm2vdv462_ppr_backend)" = "running" ]; then
     echo "Error: PPR container is not running after 10 seconds."
