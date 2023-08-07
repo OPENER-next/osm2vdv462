@@ -284,8 +284,8 @@ def main():
             for ii in range(i + 1 , len(elements)):
                 
                 if elements[i]["IFOPT"] == elements[ii]["IFOPT"]:
-                    # skip if somehow two entries with the same DHID are in the same stop_area
-                    # this should not happen, but can happen if the DHID (ref:IFOPT) is not correctly entered in OSM
+                    # skip if two entries with the same DHID are in the same stop_area
+                    # this should not happen after the platform merging in the stop_places step of the pipeline
                     print(f"WARNING: Two entries with the same DHID ({elements[i]['IFOPT']})! Ignoring ...")
                     continue
                 

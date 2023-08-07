@@ -605,16 +605,53 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/*
+ * Create an aggregate function that combines multiple jsonb objects into one.
+ * This is used to combine the tags of multiple elements into one jsonb object.
+ * The pgsql function 'jsonb_object_agg' does not allow the input of jsonb objects.
+ * 'jsonb_agg' combines the objects into an array, which is not what we want.
+ * See: https://stackoverflow.com/questions/57249804/combine-multiple-json-rows-into-one-json-object-in-postgresql
+ */
+CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb) 
+(
+    SFUNC = jsonb_concat(jsonb, jsonb),
+    STYPE = jsonb
+);
+
+
 /*********
  * QUAYS *
  *********/
+
+ /*
+  * Create a view where platforms with the same IFOPT are merged into one row.
+  * See: https://github.com/OPENER-next/osm2vdv462/issues/8
+  * Only the osm_id with the highest value is kept for reference.
+  * Only platforms with the same osm_type are merged.
+  * If there is a key that has different values in the platforms, the value of the last platform is kept.
+  * This will also merge platforms that are falsely tagged with the same IFOPT but are different platforms.
+  *   E.g. if the IFOPT of the stop_area relation is falsely used for every platform of this stop area.
+  */
+CREATE OR REPLACE VIEW platforms_merged AS (
+  SELECT
+    osm_type,
+    MAX(osm_id) as osm_id,
+    jsonb_combine(tags) as tags,
+    "IFOPT",
+    ST_Union(geom) as geom
+  FROM
+    platforms
+  GROUP BY
+    "IFOPT", osm_type
+);
+
 
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*, get_Level(pts.tags) AS "level"
-  FROM platforms pts
+  FROM platforms_merged pts
   JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
