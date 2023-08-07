@@ -1,8 +1,5 @@
 # Optionally run the PPR preprocessing
-if [ "$RUN_PREPROCESSING" = "y" ] ||
-   [ "$RUN_PREPROCESSING" = "Y" ] ||
-   [ "$PARAMETER_PREPROCESSING" = "True" ] ||
-   [ "$PARAMETER_PREPROCESSING" = "true" ]; then
+if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_AUTOMATICALLY" = "true" ]; then
   if [ "$IMPORT_FILE_PATH" != "" ]; then
     docker-compose up osm2vdv462_ppr_preprocess
 
