@@ -1,5 +1,5 @@
 # Import osm data file with osm2pgsql
-if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ]; then
+if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ] || [ "$RUN_AUTOMATICALLY" = "true" ]; then
   # Run osm2pgsql import scripts
   docker-compose --profile osm2pgsql up -d
   docker-compose exec osm2vdv462_osm2pgsql osm2pgsql \
