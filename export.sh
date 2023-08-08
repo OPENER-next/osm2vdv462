@@ -5,7 +5,7 @@
 helpFunction()
 {
    echo "Usage: $0 <my-osm-file.osm.pbf>"
-   echo "  If no parameter is passed, the script will interactively guide through all steps of the eport."
+   echo "  If no parameter is passed, the script will interactively guide through all steps of the export."
    exit 1 # Exit script after printing help
 }
 
