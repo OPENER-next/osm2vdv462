@@ -167,7 +167,7 @@ def createPathNetwork(cur, edges, relation_id, dhid_from, dhid_to):
     for edge in edgeIter:
         if requiresAccessSpace(previousEdge, edge): # checks whether the given parameters need the creation of an access space
             newDHID, toLevel = insertAccessSpaces(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space and the level of the access space
-            pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID, abs(fromLevel - toLevel))
+            pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID, toLevel - fromLevel)
             if pathId:
                 insertPathsElementsRef(cur, pathId, pathLinkEdges)
             pathLink = edge["path"] # create a new pathLink consisting of the current edge
@@ -184,7 +184,7 @@ def createPathNetwork(cur, edges, relation_id, dhid_from, dhid_to):
         previousEdge = edge
     
     # the last part of the path is not inserted yet (between the last access space and the stop_area_element 'dhid_to')
-    pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, dhid_to, abs(fromLevel - toLevel))
+    pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, dhid_to, toLevel - fromLevel)
         
     if pathId:
         insertPathsElementsRef(cur, pathId, pathLinkEdges)

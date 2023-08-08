@@ -561,19 +561,19 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * Returns the seconds as integer (rounded up to the next integer).
  * Special case elevator: the duration is estimated based on the number of levels that are passed.
  */
-CREATE OR REPLACE FUNCTION estimate_duration(tags jsonb, geo geometry, level NUMERIC, walking_speed NUMERIC) RETURNS INTEGER AS
+CREATE OR REPLACE FUNCTION estimate_duration(tags jsonb, geo geometry, level NUMERIC, walking_speed NUMERIC) RETURNS INTERVAL AS
 $$
 SELECT
   CASE
     WHEN tags->>'highway' = 'elevator' THEN
       CASE
-        WHEN level = 0 THEN 60 -- return 60 seconds as a fallback
-        ELSE (30 + level * 10)::INT -- estimation: 10 seconds per level plus 30 seconds for entering and leaving the elevator
+        WHEN level = 0 THEN make_interval(secs => 60) -- return 60 seconds as a fallback
+        ELSE make_interval(secs => 30 + ABS(level) * 10) -- estimation: 10 seconds per level plus 30 seconds for entering and leaving the elevator
       END
     ELSE
-      (ST_Length(
+      make_interval(secs => (ST_Length(
         ST_Transform(geo, current_setting('export.PROJECTION')::INT)::geography
-      ) / walking_speed)::INT
+      ) / walking_speed))
   END
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
@@ -591,7 +591,6 @@ DECLARE
 BEGIN
   duration := extract_duration($1->>'duration');
   IF duration IS NULL THEN
-    -- the returned integer value is automatically converted to 'interval'
     duration := estimate_duration($1, $2, $3, 1.4);
   END IF;
   RETURN xmlelement(

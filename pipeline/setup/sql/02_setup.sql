@@ -50,7 +50,7 @@ CREATE TABLE path_links (
   stop_area_relation_id INT,
   start_node_id TEXT,
   end_node_id TEXT,
-  level NUMERIC,
+  level NUMERIC, -- positive for upwards link, negative for downwards link
   geom GEOMETRY,
   -- constraint used to filter potential duplicated path links
   -- include geom column because in rare cases the start & end node can be identical for different path links
