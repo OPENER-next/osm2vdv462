@@ -1,4 +1,4 @@
-name: NeTEx Schema Validation
+name: Validation
 
 on:
   push:
@@ -8,22 +8,40 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
+
+  export:
+    name: Export Pipeline Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout osm2vdv462
         uses: actions/checkout@v3
-        with:
-          path: osm2vdv462
 
+      - name: Run export pipeline with example data
+        run: ./export.sh ./example_data/tu-campus_technopark.osm.pbf
+
+      - name: Upload export as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: example_export
+          path: export.xml
+
+  validate:
+    name: NeTEx Schema Validation
+    runs-on: ubuntu-latest
+    needs: export
+    steps:
       - name: Checkout NeTEx XSD
         uses: actions/checkout@v3
         with:
           repository: NeTEx-CEN/NeTEx
-          path: NeTEx
 
       - name: Install xmllint
         run: sudo apt-get install libxml2-utils
 
-      - name: Validate examples against NeTEx XSD
-        run: xmllint --noout --schema NeTEx/xsd/NeTEx_publication.xsd osm2vdv462/example_export.xml
+      - name: Download example export
+        uses: actions/download-artifact@v3
+        with:
+          name: example_export
+
+      - name: Validate example export against NeTEx XSD
+        run: xmllint --noout --schema xsd/NeTEx_publication.xsd exampl_export.xml
