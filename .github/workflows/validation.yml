@@ -9,7 +9,7 @@ on:
 
 jobs:
 
-  export:a
+  export:
     name: Export Pipeline Validation
     runs-on: ubuntu-latest
     steps:
