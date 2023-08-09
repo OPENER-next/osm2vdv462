@@ -9,7 +9,7 @@ on:
 
 jobs:
 
-  export:
+  export:a
     name: Export Pipeline Validation
     runs-on: ubuntu-latest
     steps:
@@ -18,16 +18,16 @@ jobs:
 
       - name: Run export pipeline with example data
         run: |
-             for file in ./example_data/*; do
-               echo "Export $file"
-               ./export.sh "$file"
-             done
+          for file in ./example_data/*; do
+            echo "Export $file"
+            ./export.sh "$file"
+          done
 
       - name: Upload exported files as artifact
         uses: actions/upload-artifact@v3
         with:
           name: example_export
-          path: *_export.xml
+          path: ./*_export.xml
 
   validate:
     name: NeTEx Schema Validation
@@ -46,11 +46,11 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: example_export
-          path: ./example_export
+          path: ./example_export/
 
       - name: Validate example export against NeTEx XSD
         run: |
-             for file in ./example_export/*; do
-               echo "Validate $file"
-               xmllint --noout --schema xsd/NeTEx_publication.xsd "$file"
-             done
+          for file in ./example_export/*; do
+            echo "Validate $file"
+            xmllint --noout --schema xsd/NeTEx_publication.xsd "$file"
+          done
