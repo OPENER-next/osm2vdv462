@@ -83,6 +83,5 @@ if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ] || [ "$RUN_AUTOMATICALLY" 
   fi
 
   echo "Done. Export has been saved to $(pwd)/$EXPORT_FILE"
+  exit 0
 fi
-
-read -p "Press Enter to exit"
