@@ -3,8 +3,6 @@ export PGDATABASE="osm2vdv462"
 
 export DOCKER_NETWORK="osm2vdv462_net"
 
-export EXPORT_FILE="export.xml"
-
 export RUN_IMPORT=""
 export RUN_PREPROCESSING=""
 export USE_PGADMIN4=""
@@ -34,6 +32,8 @@ fi
 # Retrieve the filename from the path
 if [ "$IMPORT_FILE_PATH" != "" ]; then
   export IMPORT_FILE=$(basename "$IMPORT_FILE_PATH")
+  export EXPORT_FILE="${IMPORT_FILE%%.*}_export.xml"
 else
   export IMPORT_FILE=""
+  export EXPORT_FILE="export.xml"
 fi
