@@ -2,7 +2,9 @@
 if [ "$RUN_IMPORT" = "y" ] || [ "$RUN_IMPORT" = "Y" ] || [ "$RUN_AUTOMATICALLY" = "true" ]; then
   # Run osm2pgsql import scripts
   docker-compose --profile osm2pgsql up -d
-  docker-compose exec osm2vdv462_osm2pgsql osm2pgsql \
+  # -T disables pseudo-tty allocation to prevent "The input device is not a TTY"
+  # see: https://stackoverflow.com/questions/43099116/error-the-input-device-is-not-a-tty
+  docker-compose exec -T osm2vdv462_osm2pgsql osm2pgsql \
     --slim \
     --drop \
     --cache 2048 \
