@@ -20,7 +20,7 @@ jobs:
         run: wget "${{ github.event.inputs.file_url }}" -O target_file.pbf
 
       - name: Run export pipeline
-        run: ./export.sh target_file.pbf
+        run: ./export.sh ./target_file.pbf
 
       - name: Upload export as artifact
         uses: actions/upload-artifact@v3
