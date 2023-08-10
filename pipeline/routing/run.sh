@@ -15,9 +15,9 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
 
     # restart the PPR backend container to reload the new routing graph file
     # before restarting, check if the container is already running
-    if [ "$(docker inspect -f '{{.State.Running}}' osm2vdv462_ppr_backend)" = "running" ]; then
+    if [ "$(docker inspect -f '{{.State.Status}}' osm2vdv462_ppr_backend)" = "running" ]; then
       echo "Restarting PPR backend container ..."
-      docker-compose restart osm2vdv462_ppr_backend
+      docker-compose up -d osm2vdv462_ppr_backend --force-recreate
     else
       docker-compose up -d osm2vdv462_ppr_backend
     fi
@@ -31,7 +31,6 @@ else
 fi
 
 echo "Waiting for PPR container to start ..."
-sleep 10
 
 # perform healthcheck on the PPR container and wait until the routing graph is loaded
 # it is not possible to do this in docker compose, because the container would need a tool like curl or wget to perform the healthcheck
