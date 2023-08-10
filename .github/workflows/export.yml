@@ -1,4 +1,4 @@
-name: Export
+run-name: Export ${{ inputs.file_url }}
 
 on:
   workflow_dispatch:
