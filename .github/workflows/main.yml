@@ -1,0 +1,29 @@
+name: Export
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_url:
+        description: 'URL to OSM file (.pbf)'     
+        required: true
+        type: string
+
+jobs:
+  export:
+    name: Export OSM File
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout osm2vdv462
+        uses: actions/checkout@v3
+        
+      - name: Download file
+        run: wget "${{ github.event.inputs.file_url }}" -O target_file.pbf
+
+      - name: Run export pipeline
+        run: ./export.sh target_file.pbf
+
+      - name: Upload export as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: file_export
+          path: ./target_file_export.xml
