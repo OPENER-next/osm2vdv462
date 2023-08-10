@@ -31,6 +31,7 @@ else
 fi
 
 echo "Waiting for PPR container to start ..."
+sleep 10
 
 # perform healthcheck on the PPR container and wait until the routing graph is loaded
 # it is not possible to do this in docker compose, because the container would need a tool like curl or wget to perform the healthcheck
