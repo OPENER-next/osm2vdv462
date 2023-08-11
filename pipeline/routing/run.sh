@@ -3,10 +3,10 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
   if [ "$IMPORT_FILE_PATH" != "" ]; then
     docker-compose up osm2vdv462_ppr_preprocess
 
-    exit_status=$(docker inspect osm2vdv462_ppr_preprocess --format='{{.State.ExitCode}}')
+    exit_status=$(docker inspect --format='{{.State.ExitCode}}' osm2vdv462_ppr_preprocess)
 
     # always remove the preprocessing container, even if it exited succesfully
-    docker-compose rm osm2vdv462_ppr_preprocess -f
+    docker-compose rm -f osm2vdv462_ppr_preprocess
 
     if [ ! $exit_status -eq 0 ]; then
       echo "Error: Preprocess exited with status $exit_status."
@@ -17,7 +17,7 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
     # before restarting, check if the container is already running
     if [ "$(docker inspect -f '{{.State.Status}}' osm2vdv462_ppr_backend)" = "running" ]; then
       echo "Restarting PPR backend container ..."
-      docker-compose up -d osm2vdv462_ppr_backend --force-recreate
+      docker-compose up -d --force-recreate osm2vdv462_ppr_backend
     else
       docker-compose up -d osm2vdv462_ppr_backend
     fi
