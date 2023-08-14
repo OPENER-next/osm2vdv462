@@ -626,23 +626,40 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  /*
   * Create a view where platforms with the same IFOPT are merged into one row.
   * See: https://github.com/OPENER-next/osm2vdv462/issues/8
+  * Only osm elements that intersect with each other are merged. This is true for:
+  *  - touching or overlapping platforms mapped as ways or areas
+  *  - nodes that lie within the polygon or on the border of a area
+  *  - nodes that lie within a way (does not have to be part of the way)
   * Only the osm_id with the highest value is kept for reference.
-  * Only platforms with the same osm_type are merged.
-  * If there is a key that has different values in the platforms, the value of the last platform is kept.
-  * This will also merge platforms that are falsely tagged with the same IFOPT but are different platforms.
-  *   E.g. if the IFOPT of the stop_area relation is falsely used for every platform of this stop area.
+  * Currently the osm_type is always 'W' (way).
+  *   This is because it's not likely that two nodes with the same IFOPT are overlapping and therefore will be merged.
+  * The tags of the elements will be merged.
+  *   If there is a key that has different values in the platforms, the value of the last platform is kept.
   */
 CREATE OR REPLACE VIEW platforms_merged AS (
   SELECT
-    osm_type,
-    MAX(osm_id) as osm_id,
+    'W'::CHAR as osm_type,
+    MAX(p3.osm_id) as osm_id,
+    p3."IFOPT",
     jsonb_combine(tags) as tags,
-    "IFOPT",
-    ST_Union(geom) as geom
-  FROM
-    platforms
-  GROUP BY
-    "IFOPT", osm_type
+    ST_Union(p3.geom) as geom
+  FROM (
+    SELECT p1.* FROM platforms p1
+    JOIN platforms p2 ON p1."IFOPT" = p2."IFOPT"
+    WHERE ST_Intersects(p1.geom, p2.geom) AND NOT ST_Equals (p1.geom, p2.geom)
+  ) as p3
+	GROUP BY p3."IFOPT"
+);
+
+
+/*
+ * Create view that contains all platforms and replaces the splitted platforms with the merged ones.
+ * This is done by using a UNION of the merged platforms and the platforms that are not merged.
+ */
+CREATE OR REPLACE VIEW platforms_union AS (
+SELECT * from platforms_merged
+UNION
+SELECT * from platforms WHERE platforms."IFOPT" not in (SELECT "IFOPT" from platforms_merged)
 );
 
 
@@ -651,7 +668,7 @@ CREATE OR REPLACE VIEW platforms_merged AS (
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*, get_Level(pts.tags) AS "level"
-  FROM platforms_merged pts
+  FROM platforms_union pts
   JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
