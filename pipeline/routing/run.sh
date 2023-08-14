@@ -14,13 +14,9 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
     fi
 
     # restart the PPR backend container to reload the new routing graph file
-    # before restarting, check if the container is already running
-    if [ "$(docker inspect -f '{{.State.Status}}' osm2vdv462_ppr_backend)" = "running" ]; then
-      echo "Restarting PPR backend container ..."
-      docker-compose up -d --force-recreate osm2vdv462_ppr_backend
-    else
-      docker-compose up -d osm2vdv462_ppr_backend
-    fi
+    echo "Restarting PPR backend container ..."
+    docker-compose up -d --force-recreate osm2vdv462_ppr_backend
+
   else
     echo "Error: Cannot run preprocessing without importing an OSM file."
     exit 1
@@ -29,9 +25,6 @@ else
   echo "Skipping preprocessing ..."
   docker-compose up -d osm2vdv462_ppr_backend
 fi
-
-echo "Waiting for PPR container to start ..."
-sleep 10
 
 # perform healthcheck on the PPR container and wait until the routing graph is loaded
 # it is not possible to do this in docker compose, because the container would need a tool like curl or wget to perform the healthcheck
