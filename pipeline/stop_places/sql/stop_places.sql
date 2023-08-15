@@ -991,10 +991,10 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             ex_LineString(ex.geom, ex.id),
             -- <From> <To>
             ex_FromTo(ex.from, ex.to),
-            -- <AccessFeatureType>
-            ex_AccessFeatureType(ex.tags),
             -- <NumberOfSteps>
             ex_NumberOfSteps(ex.tags),
+            -- <AccessFeatureType>
+            ex_AccessFeatureType(ex.tags),
             -- <TransferDuration>
             ex_TransferDuration(ex.tags, ex.geom, ex.level)
           )
