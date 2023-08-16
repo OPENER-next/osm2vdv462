@@ -624,51 +624,39 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  *********/
 
  /*
-  * Create a view where platforms with the same IFOPT are merged into one row.
+  * Sometimes there can be multiple platforms with the same IFOPT that have to be merged into one single platform.
   * See: https://github.com/OPENER-next/osm2vdv462/issues/8
-  * Only osm elements that intersect with each other are merged. This is true for:
-  *  - touching or overlapping platforms mapped as ways or areas
-  *  - nodes that lie within the polygon or on the border of a area
-  *  - nodes that lie within a way (does not have to be part of the way)
-  * Only the osm_id with the highest value is kept for reference.
-  * Currently the osm_type is always 'W' (way).
-  *   This is because it's not likely that two nodes with the same IFOPT are overlapping and therefore will be merged.
+  * Create view that contains all platforms and replaces the splitted platforms with merged ones.
+  * This is done by first clustering the platforms by their IFOPT and then merging the geometries and tags.
   * The tags of the elements will be merged.
   *   If there is a key that has different values in the platforms, the value of the last platform is kept.
   */
 CREATE OR REPLACE VIEW platforms_merged AS (
   SELECT
-    'W'::CHAR as osm_type,
-    MAX(p3.osm_id) as osm_id,
-    p3."IFOPT",
-    jsonb_combine(tags) as tags,
-    ST_Union(p3.geom) as geom
+    -- only keep the first osm_id of the array
+    (array_agg(osm_id))[1] AS osm_id,
+    -- only keep the first osm_type of the array
+    (array_agg(osm_type))[1] AS osm_type,
+    "IFOPT",
+    ST_Union(p1.geom) AS geom,
+    jsonb_combine(p1.tags) AS tags
   FROM (
-    SELECT p1.* FROM platforms p1
-    JOIN platforms p2 ON p1."IFOPT" = p2."IFOPT"
-    WHERE ST_Intersects(p1.geom, p2.geom) AND NOT ST_Equals (p1.geom, p2.geom)
-  ) as p3
-	GROUP BY p3."IFOPT"
+    SELECT
+      *,
+      -- only cluster elements that are directly next to each other (distance of 0)
+      -- at least two elements are required to create a cluster
+      ST_ClusterDBSCAN(geom, 0, 1) OVER() AS cluster_id
+    FROM platforms
+  ) p1
+  GROUP BY p1."IFOPT", p1.cluster_id
 );
-
-
-/*
- * Create view that contains all platforms and replaces the splitted platforms with the merged ones.
- * This is done by using a UNION of the merged platforms and the platforms that are not merged.
- */
-CREATE OR REPLACE VIEW platforms_union AS (
-SELECT * from platforms_merged
-UNION
-SELECT * from platforms WHERE platforms."IFOPT" not in (SELECT "IFOPT" from platforms_merged)
-);
-
 
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*, get_Level(pts.tags) AS "level"
-  FROM platforms_union pts
+  FROM platforms_merged pts
   JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
