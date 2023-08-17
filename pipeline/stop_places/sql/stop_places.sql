@@ -629,7 +629,7 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
   * Create view that contains all platforms and replaces the splitted platforms with merged ones.
   * This is done by first clustering the platforms by their IFOPT and then merging the geometries and tags.
   * The tags of the elements will be merged.
-  *   If there is a key that has different values in the platforms, the value of the last platform is kept.
+  * If there is a key that has different values in the platforms, the value of the last platform is kept.
   */
 CREATE OR REPLACE VIEW platforms_merged AS (
   SELECT
