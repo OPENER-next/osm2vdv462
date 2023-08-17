@@ -624,6 +624,51 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  *********/
 
  /*
+ * Create view that splits all platforms that have multiple IFOPTs into multiple platforms.
+ * The tags of the platform relation and the corresponding ref entry are merged.
+ * The geometry, id and type of the ref element is used as the new platform element.
+ */
+CREATE OR REPLACE VIEW platforms_split AS (
+SELECT p1.member_osm_type, p1.member_osm_id, p2."IFOPT", jsonb_concat(p.tags, p1.tags) as tags, p1.geom
+	FROM platforms p
+  -- Join the mapping of platforms to their corresponding ref entry
+  -- only the rows where the IFOPT has multiple values are used (IFOPT entries with a ';' in them)
+	JOIN
+	(
+	SELECT ptr.relation_id as platform_osm_id, pts.osm_id as member_osm_id, ptr.osm_type as member_osm_type, pts.tags->>'ref' as "ref", pts.tags, pts.geom as geom
+	  FROM platforms_members pts
+	  JOIN platforms_members_ref ptr
+		ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
+	) p1
+	ON p."IFOPT" LIKE '%;%' AND
+	  p1.platform_osm_id = p.osm_id
+  -- Join the mapping of splitted IFOPTs to the corresponding ref entry
+  -- only the rows where the IFOPT has multiple values are used
+  -- unnest is used to split the IFOPTs and refs into multiple corresponding rows
+	JOIN
+	(
+	SELECT unnest(string_to_array(p."IFOPT", ';')) as "IFOPT", unnest(string_to_array(p.tags->>'ref', ';')) as pref from platforms p
+		WHERE p."IFOPT" LIKE '%;%'
+	) p2
+	ON
+	  p2.pref = p1."ref"
+);
+
+
+/*
+ * Insert all newly generated splitted platforms into the platforms table.
+ */
+INSERT INTO platforms
+SELECT * FROM platforms_split;
+
+
+/*
+ * Delete all platforms with multiple IFOPTs that have been splitted before.
+ */
+DELETE FROM platforms p WHERE p."IFOPT" LIKE '%;%';
+
+
+ /*
   * Sometimes there can be multiple platforms with the same IFOPT that have to be merged into one single platform.
   * See: https://github.com/OPENER-next/osm2vdv462/issues/8
   * Create view that contains all platforms and replaces the splitted platforms with merged ones.
