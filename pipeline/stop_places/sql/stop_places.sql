@@ -605,16 +605,58 @@ $$
 LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
+/*
+ * Create an aggregate function that combines multiple jsonb objects into one.
+ * This is used to combine the tags of multiple elements into one jsonb object.
+ * The pgsql function 'jsonb_object_agg' does not allow the input of jsonb objects.
+ * 'jsonb_agg' combines the objects into an array, which is not what we want.
+ * See: https://stackoverflow.com/questions/57249804/combine-multiple-json-rows-into-one-json-object-in-postgresql
+ */
+CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb) 
+(
+    SFUNC = jsonb_concat(jsonb, jsonb),
+    STYPE = jsonb
+);
+
+
 /*********
  * QUAYS *
  *********/
+
+ /*
+  * Sometimes there can be multiple platforms with the same IFOPT that have to be merged into one single platform.
+  * See: https://github.com/OPENER-next/osm2vdv462/issues/8
+  * Create view that contains all platforms and replaces the splitted platforms with merged ones.
+  * This is done by first clustering the platforms by their IFOPT and then merging the geometries and tags.
+  * The tags of the elements will be merged.
+  * If there is a key that has different values in the platforms, the value of the last platform is kept.
+  */
+CREATE OR REPLACE VIEW platforms_merged AS (
+  SELECT
+    -- only keep the first osm_id of the array
+    (array_agg(osm_id))[1] AS osm_id,
+    -- only keep the first osm_type of the array
+    (array_agg(osm_type))[1] AS osm_type,
+    "IFOPT",
+    ST_Union(p1.geom) AS geom,
+    jsonb_combine(p1.tags) AS tags
+  FROM (
+    SELECT
+      *,
+      -- only cluster elements that are directly next to each other (distance of 0)
+      -- at least two elements are required to create a cluster
+      ST_ClusterDBSCAN(geom, 0, 1) OVER() AS cluster_id
+    FROM platforms
+  ) p1
+  GROUP BY p1."IFOPT", p1.cluster_id
+);
 
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*, get_Level(pts.tags) AS "level"
-  FROM platforms pts
+  FROM platforms_merged pts
   JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
