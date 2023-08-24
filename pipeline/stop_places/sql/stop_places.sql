@@ -632,26 +632,30 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  * This is only done for platforms that don't are a relation and therefore still have multiple IFOPTs.
  */
 CREATE OR REPLACE VIEW platforms_split AS (
-SELECT COALESCE(pe.osm_type,p.osm_type) as osm_type,
-       COALESCE(pe.osm_id,p.osm_id) as osm_id,
-       COALESCE(p1."IFOPT",p."IFOPT") as "IFOPT",
-       COALESCE(jsonb_concat(p.tags, pe.tags), p.tags) as tags,
-       COALESCE(pe.geom,p.geom) as geom
+SELECT
+  p.osm_type as osm_type,
+  p.osm_id as osm_id,
+  -- Get the corresponding IFOPT from the platform edge by using the ref tag
+  COALESCE(
+    (string_to_array(p."IFOPT", ';'))[
+      array_position(string_to_array(p.tags->>'ref', ';'), pe.tags->>'ref')
+    ],
+    p."IFOPT"
+  ) as "IFOPT",
+  COALESCE(jsonb_concat(p.tags, pe.tags), p.tags) as tags,
+  COALESCE(pe.geom,p.geom) as geom
 	FROM platforms p
   -- Join the platforms_edges elements to the platforms where they touch and have the same ref tag
-  -- only the rows where the IFOPT has multiple values are used (IFOPT entries with a ';' in them)
 	LEFT JOIN platforms_edges pe
-	ON p."IFOPT" LIKE '%;%' AND ST_Touches(p.geom, pe.geom) AND array_position(string_to_array(p.tags->>'ref', ';'), pe.tags->>'ref') IS NOT NULL
-  -- Join the mapping of splitted IFOPTs to the corresponding ref entry
-  -- only the rows where the IFOPT has multiple values are used
-  -- unnest is used to split the IFOPTs and refs into multiple corresponding rows
-	LEFT JOIN
-	(
-	SELECT unnest(string_to_array(p."IFOPT", ';')) as "IFOPT", unnest(string_to_array(p.tags->>'ref', ';')) as p_ref from platforms p
-		WHERE p."IFOPT" LIKE '%;%'
-	) p1
-	ON
-	  p1.p_ref = pe.tags->>'ref'
+  -- Only the rows where the IFOPT has multiple values are used (IFOPT entries with a ';' in them)
+	ON p."IFOPT" LIKE '%;%' AND
+  -- Check if the platform and the platform edge touch each other
+  ST_Touches(p.geom, pe.geom) AND
+  -- Only use the platform edges that have the same ref tag as the platform
+  array_position(
+    string_to_array(p.tags->>'ref', ';'),
+    pe.tags->>'ref'
+  ) IS NOT NULL
 );
 
 

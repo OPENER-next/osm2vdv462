@@ -33,6 +33,7 @@ local platforms_table = osm2pgsql.define_table({
     }
 })
 
+
 function extract_platforms(object, osm_type)
     return extract_by_conditions_to_table(object, osm_type, extract_conditions, platforms_table)
 end
