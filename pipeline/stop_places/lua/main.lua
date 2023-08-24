@@ -2,7 +2,7 @@ package.path = package.path .. ';/scripts/osm2pgsql/?.lua'
 
 require 'stop_areas'
 require 'platforms'
-require 'platforms_members'
+require 'platforms_edges'
 require 'stop_positions'
 require 'entrances'
 require 'parking'
@@ -20,7 +20,7 @@ end
 
 function osm2pgsql.process_way(object)
     if extract_platforms(object, 'way') then return end
-    if extract_platforms_members(object, 'way') then return end
+    if extract_platforms_edges(object, 'way') then return end
     if extract_parking(object, 'way') then return end
     if extract_highways(object, 'way') then return end
     extract_pois(object, 'way')

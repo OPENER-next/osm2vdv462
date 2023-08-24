@@ -8,9 +8,9 @@ local extract_conditions = {
     }
 }
 
--- Create table that contains members of platforms
-local platforms_members_table = osm2pgsql.define_table({
-    name = "platforms_members",
+-- Create table that contains edges of platforms
+local platforms_edges_table = osm2pgsql.define_table({
+    name = "platforms_edges",
     ids = {
         type = 'any',
         id_column = 'osm_id',
@@ -23,6 +23,6 @@ local platforms_members_table = osm2pgsql.define_table({
 })
 
 
-function extract_platforms_members(object, osm_type)
-    return extract_by_conditions_to_table(object, osm_type, extract_conditions, platforms_members_table)
+function extract_platforms_edges(object, osm_type)
+    return extract_by_conditions_to_table(object, osm_type, extract_conditions, platforms_edges_table)
 end
