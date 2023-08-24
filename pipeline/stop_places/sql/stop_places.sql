@@ -638,7 +638,7 @@ SELECT COALESCE(pe.osm_type,p.osm_type) as osm_type,
        COALESCE(jsonb_concat(p.tags, pe.tags), p.tags) as tags,
        COALESCE(pe.geom,p.geom) as geom
 	FROM platforms p
-  -- Join the mapping of platforms to their corresponding ref entry
+  -- Join the platforms_edges elements to the platforms where they touch and have the same ref tag
   -- only the rows where the IFOPT has multiple values are used (IFOPT entries with a ';' in them)
 	LEFT JOIN platforms_edges pe
 	ON p."IFOPT" LIKE '%;%' AND ST_Touches(p.geom, pe.geom) AND array_position(string_to_array(p.tags->>'ref', ';'), pe.tags->>'ref') IS NOT NULL

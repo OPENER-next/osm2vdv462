@@ -19,7 +19,7 @@ local extract_conditions = {
 }
 
 -- Create table that contains all platforms
-platforms_table = osm2pgsql.define_table({
+local platforms_table = osm2pgsql.define_table({
     name = "platforms",
     ids = {
         type = 'any',
