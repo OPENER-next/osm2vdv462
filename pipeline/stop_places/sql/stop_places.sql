@@ -623,6 +623,41 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  * QUAYS *
  *********/
 
+/* Create view that splits all platforms that have multiple IFOPTs into multiple platforms.
+ * Ways that touch a platform and have the corresponding ref tag are added to the platform edges.
+ * This is done by using the ST_Touches function.
+ * The ST_Touches function is used to find all edges that share a node with a platform.
+ * Platform edges can be part of a platform relation or must share some node with a platform.
+ * Because of this just using the members of a platform relation is not sufficient.
+ */
+CREATE OR REPLACE VIEW platforms_split AS (
+  SELECT
+    -- osm_type and osm_id of the original platform is kept to be able to join stop_areas_members_ref to build the final_quays view
+    ps.osm_type as osm_type,
+    ps.osm_id as osm_id,
+    -- Get the corresponding IFOPT by using the split IFOPT from the subquery 'ps'
+    ps."split_IFOPT" as "IFOPT",
+    COALESCE(jsonb_concat(ps.tags, pe.tags), ps.tags) as tags,
+    COALESCE(pe.geom, ps.geom) as geom
+  FROM (
+    -- split platforms with multiple IFOPTs and expand into multiple rows
+    -- if there is only one IFOPT the original IFOPT is put into 'split_IFOPT'
+    -- 'split_ref' will be NULL if thre is no ref tag
+    SELECT
+      *,
+      string_to_table(platforms."IFOPT", ';') AS "split_IFOPT",
+      string_to_table(platforms.tags->>'ref', ';') AS "split_ref"
+    FROM platforms
+  ) ps
+  -- Join platform edges if any to the platforms to refine tags and geometry
+  LEFT JOIN platforms_edges pe
+  -- Check if the platform edge fully overlaps with the platform border
+  ON ST_Touches(ps.geom, pe.geom) AND
+  -- Only use the platform edges that have the same ref tag as the platform
+  ps."split_ref" = pe.tags->>'ref'
+);
+
+
  /*
   * Sometimes there can be multiple platforms with the same IFOPT that have to be merged into one single platform.
   * See: https://github.com/OPENER-next/osm2vdv462/issues/8
@@ -646,7 +681,7 @@ CREATE OR REPLACE VIEW platforms_merged AS (
       -- only cluster elements that are directly next to each other (distance of 0)
       -- at least two elements are required to create a cluster
       ST_ClusterDBSCAN(geom, 0, 1) OVER() AS cluster_id
-    FROM platforms
+    FROM platforms_split
   ) p1
   GROUP BY p1."IFOPT", p1.cluster_id
 );
