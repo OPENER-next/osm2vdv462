@@ -635,12 +635,14 @@ CREATE OR REPLACE VIEW platforms_split AS (
     -- osm_type and osm_id of the original platform is kept to be able to join stop_areas_members_ref to build the final_quays view
     ps.osm_type as osm_type,
     ps.osm_id as osm_id,
-    -- Get the corresponding IFOPT from the platform edge by using the ref tag
+    -- Get the corresponding IFOPT by using the split IFOPT from the subquery 'ps'
     ps."split_IFOPT" as "IFOPT",
     COALESCE(jsonb_concat(ps.tags, pe.tags), ps.tags) as tags,
     COALESCE(pe.geom, ps.geom) as geom
   FROM (
     -- split platforms with multiple IFOPTs and expand into multiple rows
+    -- if there is only one IFOPT the original IFOPT is put into 'split_IFOPT'
+    -- 'split_ref' will be NULL if thre is no ref tag
     SELECT
       *,
       string_to_table(platforms."IFOPT", ';') AS "split_IFOPT",
