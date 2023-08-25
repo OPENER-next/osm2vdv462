@@ -629,33 +629,30 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  * The ST_Touches function is used to find all edges that share a node with a platform.
  * Platform edges can be part of a platform relation or must share some node with a platform.
  * Because of this just using the members of a platform relation is not sufficient.
- * This is only done for platforms that don't are a relation and therefore still have multiple IFOPTs.
  */
 CREATE OR REPLACE VIEW platforms_split AS (
-SELECT
-  p.osm_type as osm_type,
-  p.osm_id as osm_id,
-  -- Get the corresponding IFOPT from the platform edge by using the ref tag
-  COALESCE(
-    (string_to_array(p."IFOPT", ';'))[
-      array_position(string_to_array(p.tags->>'ref', ';'), pe.tags->>'ref')
-    ],
-    p."IFOPT"
-  ) as "IFOPT",
-  COALESCE(jsonb_concat(p.tags, pe.tags), p.tags) as tags,
-  COALESCE(pe.geom,p.geom) as geom
-	FROM platforms p
-  -- Join the platforms_edges elements to the platforms where they touch and have the same ref tag
-	LEFT JOIN platforms_edges pe
-  -- Only the rows where the IFOPT has multiple values are used (IFOPT entries with a ';' in them)
-	ON p."IFOPT" LIKE '%;%' AND
-  -- Check if the platform and the platform edge touch each other
-  ST_Touches(p.geom, pe.geom) AND
+  SELECT
+    -- osm_type and osm_id of the original platform is kept to be able to join stop_areas_members_ref to build the final_quays view
+    ps.osm_type as osm_type,
+    ps.osm_id as osm_id,
+    -- Get the corresponding IFOPT from the platform edge by using the ref tag
+    ps."split_IFOPT" as "IFOPT",
+    COALESCE(jsonb_concat(ps.tags, pe.tags), ps.tags) as tags,
+    COALESCE(pe.geom, ps.geom) as geom
+  FROM (
+    -- split platforms with multiple IFOPTs and expand into multiple rows
+    SELECT
+      *,
+      string_to_table(platforms."IFOPT", ';') AS "split_IFOPT",
+      string_to_table(platforms.tags->>'ref', ';') AS "split_ref"
+    FROM platforms
+  ) ps
+  -- Join platform edges if any to the platforms to refine tags and geometry
+  LEFT JOIN platforms_edges pe
+  -- Check if the platform edge fully overlaps with the platform border
+  ON ST_Touches(ps.geom, pe.geom) AND
   -- Only use the platform edges that have the same ref tag as the platform
-  array_position(
-    string_to_array(p.tags->>'ref', ';'),
-    pe.tags->>'ref'
-  ) IS NOT NULL
+  ps."split_ref" = pe.tags->>'ref'
 );
 
 
