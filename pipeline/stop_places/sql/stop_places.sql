@@ -88,7 +88,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a single key value pair element where value is empty if the given tag value equals "yes"
+ * Create a single key value pair element where the value is empty if the given tag value equals "yes"
  * Else returns null
  */
 CREATE OR REPLACE FUNCTION delfi_attribute_on_yes_xml(delfiid text, val text) RETURNS xml AS
@@ -101,25 +101,294 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a keyList element based on a delfi attribut to osm matching
+ * Create a single key value pair element where the value is empty if the given tag value equals to the given value
+ * Else returns null
+ */
+CREATE OR REPLACE FUNCTION delfi_attribute_check_value_xml(delfiid text, val text, val2 text) RETURNS xml AS
+$$
+SELECT CASE
+  WHEN $2 = $3 THEN create_KeyValue($1, '')
+END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a single key value pair element where the value is empty if the given tag value equals to one of the given array values
+ * Else returns null
+ */
+CREATE OR REPLACE FUNCTION delfi_attribute_check_values_array_xml(delfiid text, val text, valArray text[]) RETURNS xml AS
+$$
+BEGIN
+  IF val = ANY (valArray) THEN
+    RETURN create_KeyValue($1, '');
+  END IF;
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Create a single key value pair element where the value is the given value if it is not empty
+ * Else returns null
+ */
+CREATE OR REPLACE FUNCTION delfi_attribute_get_value_xml(delfiid text, val text) RETURNS xml AS
+$$
+SELECT CASE
+  WHEN $2 IS NOT NULL THEN create_KeyValue($1, $2)
+END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a keyList element for stop places based on a delfi attribut to osm matching
  * Optionally additional key value pairs can be passed to the function
  * Returns null when no tag matching exists
  */
-CREATE OR REPLACE FUNCTION ex_keyList(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_keyList_StopPlace(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+  result := xmlconcat(
+    additionalPairs
+  );
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "keyList", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
+
+/*
+ * Create a keyList element for quays based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_Quay(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
 $$
 DECLARE
   result xml;
 BEGIN
   result := xmlconcat(
     additionalPairs,
-    delfi_attribute_on_yes_xml('1120', tags->>'bench'),
-    delfi_attribute_on_yes_xml('1140', tags->>'passenger_information_display'),
-    delfi_attribute_on_yes_xml('1141', tags->>'passenger_information_display:speech_output')
+    delfi_attribute_on_yes_xml('1120', tags->>'bench'), -- waiting area with seat
+    delfi_attribute_on_yes_xml('1140', tags->>'passenger_information_display'), -- dynamic visual passenger information display
+    delfi_attribute_on_yes_xml('1141', tags->>'passenger_information_display:speech_output'),  -- with acoustic output
+    delfi_attribute_on_yes_xml('1150', tags->>'announcement'), -- automatic announcements
+    delfi_attribute_on_yes_xml('1170', tags->>'height'),  -- curb/platform height
+    delfi_attribute_on_yes_xml('1180', tags->>'width')   -- curb/platform width
+    --delfi_attribute_on_yes_xml('1190', tags->>''), -- distance between platform edge and center of track
+    --delfi_attribute_on_yes_xml('1200', tags->>''), -- high curb with track guidance
+    --delfi_attribute_on_yes_xml('1201', tags->>''), -- high curb with track guidance and double cove
+    --delfi_attribute_on_yes_xml('1202', tags->>''), -- high curb without track guidance
+    --delfi_attribute_on_yes_xml('1203', tags->>''), -- 'combiboard' with track guidance
+    --delfi_attribute_on_yes_xml('2071', tags->>''), -- tactile/visual floor indicators in the entrance area with locating strips
+    --delfi_attribute_on_yes_xml('2140', tags->>''), -- entry in the middle of the road
   );
 
   IF result IS NOT NULL THEN
     RETURN xmlelement(name "keyList", result);
   END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
+
+/*
+ * Create a keyList element for site path links based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_SitePathLink(tags jsonb, a geometry, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+DECLARE
+  pathLength real;
+  result xml;
+BEGIN
+  IF tags->>'highway' = 'elevator'
+    THEN pathLength := 0;
+  ELSE
+    pathLength := ST_Length(
+      ST_Transform($2, current_setting('export.PROJECTION')::INT)::geography
+    );
+  END IF;
+
+  result := xmlconcat(
+    additionalPairs,
+    create_KeyValue('2020', pathLength),  -- length of the same level way
+    delfi_attribute_get_value_xml('2021', tags->>'width'), -- width of the same level way
+    delfi_attribute_check_value_xml('2040', tags->>'railway', 'crossing'),  -- track crossing required (level platform access)
+    delfi_attribute_check_values_array_xml('2050', tags->>'surface', ARRAY['unpaved', 'unhewn_cobblestone', 'fine_gravel']), -- unpaved ground
+    delfi_attribute_on_yes_xml('2072', tags->>'tactile_paving') -- tactile/visual floor indicators as guide strips
+  );
+
+  -- stairs:
+  IF tags->>'highway' = 'steps' AND tags->>'conveying' IS NULL
+    THEN result := xmlconcat(result,
+      create_KeyValue('2110', ''::text),  -- stairs
+      -- TODO: convert step heights to cm
+      delfi_attribute_get_value_xml('2112', tags->>'step:height'),  -- step height
+      delfi_attribute_get_value_xml('2113', tags->>'step_count')  -- number of steps
+    );
+  -- step:
+  -- if there is a 'barrier=kerb' tag, then the step is a kerb
+  -- otherwise the tag 'kerb=*' is evaluated
+  ELSEIF (tags->>'barrier' = 'kerb' AND tags->>'kerb' IS NULL) OR tags->>'kerb' IN ('raised', 'rolled', 'yes')
+    THEN result := xmlconcat(result, create_KeyValue('2100', ''::text));  -- step
+    IF tags->>'kerb:height'
+      THEN result := xmlconcat(result, delfi_attribute_get_value_xml('2101', tags->>'kerb:height'));  -- step height;
+    ELSE
+      result := xmlconcat(result, delfi_attribute_get_value_xml('2101', tags->>'height'));  -- step height;
+    END IF;
+  -- elevator:
+  ELSEIF tags->>'highway' = 'elevator'
+    THEN result := xmlconcat(result, create_KeyValue('2090', ''::text));  -- lift
+    IF tags->>'length' IS NOT NULL AND tags->>'width' IS NOT NULL
+      THEN result := xmlconcat(result, create_KeyValue('2092', (tags->>'length')::real * (tags->>'width')::real));  -- footprint length of the lift
+    END IF;
+    result := xmlconcat(result,
+      delfi_attribute_get_value_xml('2093', tags->>'length'),  -- footprint length of the lift
+      delfi_attribute_get_value_xml('2094', tags->>'width')  -- footprint width of the lift
+    );
+  -- escalator:
+  ELSEIF tags->>'highway' = 'steps' AND tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible')
+    THEN result := xmlconcat(result, create_KeyValue('2130', ''::text));  -- escalator
+    -- TODO: recreate the direction of the escalator from 'incline', 'conveying' and the direction of the way
+    -- IF tags->>'incline' = 'up' AND
+    --  THEN result := xmlconcat(result, create_KeyValue('2132', 'aufwärts'::text));  -- escalator direction
+    --ELSEIF tags->>'incline' = 'down' AND
+    --  THEN result := xmlconcat(result, create_KeyValue('2132', 'abwärts'::text));  -- escalator direction
+    --END IF;
+    result := xmlconcat(result,
+      delfi_attribute_check_value_xml('2133', tags->>'conveying', 'reversible'),  -- escalator changing direction
+      -- TODO: convert to duration in seconds
+      delfi_attribute_get_value_xml('2134', tags->>'duration')   -- escalator duration in s
+    );
+  -- ramp/slope:
+  ELSEIF tags->>'highway' = 'footway' AND tags->>'incline' IS NOT NULL
+    THEN result := xmlconcat(result,
+      create_KeyValue('2120', ''::text),  -- ramp or slope
+      --delfi_attribute_get_value_xml('2122', tags->>),  -- ramp length
+      delfi_attribute_get_value_xml('2123', tags->>'width'),  -- ramp width
+      -- TODO: convert slope to degrees
+      delfi_attribute_get_value_xml('2124', tags->>'incline')  -- ramp slope
+    );
+  END IF;
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "keyList", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
+
+/*
+ * Create a keyList element for access spaces based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_AccessSpace(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+  result := additionalPairs;
+
+  -- barrier/blocking element/narrow section
+  IF tags->>'barrier' = 'cycle_barrier' OR tags->>'crossing:chicane' = 'yes'
+    THEN result := xmlconcat(result, create_KeyValue('2080', ''::text));  -- bicycle barrier
+  END IF;
+  -- delfi_attribute_on_yes_xml('2081', tags->>)  -- movement area into, through and out of the narrow section
+
+  -- elevator:
+  -- just the entry (door) of the elevator is considered as an access space
+  IF tags->>'door' IS NOT NULL
+    THEN result := (result, delfi_attribute_get_value_xml('2091', tags->>'width'));  -- door width of the lift
+  END IF;
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "keyList", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
+
+/*
+ * Create a keyList element for entrances based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_Entrance(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+  result := xmlconcat(
+    additionalPairs,
+    delfi_attribute_on_yes_xml('2030', tags->>'entrance'),  -- entrance
+    delfi_attribute_on_yes_xml('2031', tags->>'opening_hours')  -- opening hours
+  );
+
+  -- type of entrance:
+  IF tags->>'door' = 'yes'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2032', 'Tür'));
+  ELSEIF tags->>'door' = 'hinged'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2032', 'Anschlagtür'));
+  ELSEIF tags->>'door' = 'sliding'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2032', 'Schiebetür'));
+  ELSEIF tags->>'door' = 'revolving'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2032', 'Drehtür'));
+  ELSEIF tags->>'door' = 'swinging'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2032', 'Pendeltür'));
+  END IF;
+   -- type of door opening:
+  IF tags->>'automatic_door' = 'yes'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2033', 'automatisch'));
+  ELSEIF tags->>'automatic_door' = 'button'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2033', 'halbautomatisch'));
+  ELSEIF tags->>'automatic_door' = 'motion'
+    THEN result := xmlconcat(result, delfi_attribute_on_yes_xml('2033', 'automatisch'));
+  END IF;
+  result := xmlconcat(result, delfi_attribute_get_value_xml('2034', tags->>'width'));  -- door width
+
+  IF result IS NOT NULL THEN
+    RETURN xmlelement(name "keyList", result);
+  END IF;
+
+  RETURN NULL;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE;
+
+
+/*
+ * Create a keyList element based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_Parking(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+DECLARE
+  result xml;
+BEGIN
+  result := xmlconcat(
+    additionalPairs
+  );
 
   RETURN NULL;
 END
@@ -946,7 +1215,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
   -- <StopPlace>
   xmlelement(name "StopPlace", xmlattributes(ex.area_id AS "id", 'any' AS "version"),
     -- <keyList>
-    ex_keyList(ex.area_tags),
+    ex_keyList_StopPlace(ex.area_tags),
     -- <Name>
     ex_Name(ex.area_tags),
     -- <ShortName>
@@ -984,7 +1253,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <Quay>
           xmlelement(name "Quay", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_Quay(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <ShortName>
@@ -1004,7 +1273,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <Entrance>
           xmlelement(name "Entrance", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_Entrance(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <Centroid>
@@ -1022,7 +1291,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <AccessSpace>
           xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_AccessSpace(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <Centroid>
@@ -1040,7 +1309,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <Parking>
           xmlelement(name "Parking", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_Parking(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <Centroid>
@@ -1061,7 +1330,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <SitePathLink>
           xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_SitePathLink(ex.tags, ex.geom),
             -- <Distance>
             ex_Distance(ex.geom),
             -- <LineString>
