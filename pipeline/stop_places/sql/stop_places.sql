@@ -15,6 +15,84 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
+ * Convert the input to centimeters
+ * Returns null when the conversion fails or the input is null
+ */
+CREATE OR REPLACE FUNCTION convert_to_cm(value text) RETURNS text AS
+$$
+DECLARE
+  result text;
+  value_split text[];
+BEGIN
+  -- split the input string into an array if it contains a space
+  value_split := string_to_array(value, ' ');
+  -- check, if the length of the array is 1 and is a number --> value should be given as meters
+  IF array_length(value_split, 1) = 1 AND value ~ '^[0-9]+(\.[0-9]+)?$' THEN
+    -- convert the input to centimeters
+    result := (value::real * 100)::text;
+  -- check, if the length of the array is 2 and the first element is a number --> value should be given as '<value> <unit>'
+  ELSEIF array_length(value_split, 1) = 2 AND value_split[1] ~ '^[0-9]+(\.[0-9]+)?$' THEN
+    -- check, if the unit is 'm'
+    IF value_split[2] = 'm' THEN
+      -- convert the input to centimeters
+      result := (value_split[1]::real * 100)::text;
+    ELSEIF value_split[2] = 'cm' THEN
+      result := value_split[1];
+    END IF;
+  END IF;
+  RETURN result;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+/*
+ * Convert the input to degrees
+ * Returns null when the conversion fails or the input is null
+ */
+CREATE OR REPLACE FUNCTION convert_to_degrees(value text) RETURNS text AS
+$$
+DECLARE
+  result text;
+  value_split text[];
+BEGIN
+  -- split the input string into an array where the first element is the value and the second element is the unit
+  value_split[1] := string_to_array(value, ' ');
+  value_split[2] := substring(value from length(value));
+  -- check, if the length of the array is 1 and is a number --> value should be given as meters
+  IF value_split[1] ~ '^[0-9]+(\.[0-9]+)?$' THEN
+    IF value_split[2] = '%' THEN
+      result := value_split[1];
+    ELSEIF value_split[2] = '°' THEN
+      result := atan(value_split[1]::real / 100)::text;
+    END IF;
+  END IF;
+  RETURN result;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Convert the input to seconds
+ * Returns null when the conversion fails or the input is null
+ */
+CREATE OR REPLACE FUNCTION convert_to_seconds(value text, geo geometry) RETURNS text AS
+$$
+DECLARE
+  duration interval;
+  walking_speed real := 1.4;
+BEGIN
+  duration := extract_duration(value);
+  IF duration IS NULL THEN
+    duration := make_interval(secs => (calculate_Distance(geo) / walking_speed));
+  END IF;
+  RETURN extract(seconds from duration)::INT;
+END;
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
  * Create a centroid element from any geography
  * Returns null when any argument is null
  */
@@ -156,10 +234,10 @@ SELECT create_keyList(xmlconcat(
   delfi_attribute_check_values_xml('1141', tags->>'passenger_information_display:speech_output'),
   -- 1150: automatic announcements
   delfi_attribute_check_values_xml('1150', tags->>'announcement'),
-  -- 1170: curb/platform height (TODO: convert height to cm)
-  create_KeyValue('1170', tags->>'height'),
-  -- 1180: curb/platform width (TODO: convert width to cm)
-  create_KeyValue('1180', tags->>'width')
+  -- 1170: height difference between the platform and the road respectively the top edge of the rail
+  create_KeyValue('1170', convert_to_cm(tags->>'height')),
+  -- 1180: curb/platform width
+  create_KeyValue('1180', convert_to_cm(tags->>'width'))
   -- 1190: distance between platform edge and center of track
   --create_KeyValue('1190', tags->>''),
   -- 1200: high curb with track guidance
@@ -204,8 +282,8 @@ SELECT create_keyList(xmlconcat(
       xmlconcat(
       -- 2110: stairs
       create_KeyValue('2110', ''::text),
-      -- 2112: step height (TODO: convert step heights to cm)
-      create_KeyValue('2112', tags->>'step:height'),
+      -- 2112: step height
+      create_KeyValue('2112', convert_to_cm(tags->>'step:height')),
       -- 2113: number of steps
       create_KeyValue('2113', tags->>'step_count')
       )
@@ -216,11 +294,11 @@ SELECT create_keyList(xmlconcat(
       create_KeyValue('2100', ''::text),
       (SELECT CASE
         WHEN tags->>'kerb:height' IS NOT NULL THEN
-          -- 2101: step height (TODO: convert step heights to cm)
-          create_KeyValue('2101', tags->>'kerb:height')
+          -- 2101: step height
+          create_KeyValue('2101', convert_to_cm(tags->>'kerb:height'))
         WHEN tags->>'kerb:height' IS NULL THEN  -- CHECKEN, OB DAS SO GEHT, sonst: WHEN tags->>'kerb:height' IS NULL THEN
-          -- 2101: step height (TODO: convert step heights to cm)
-          create_KeyValue('2101', tags->>'height')
+          -- 2101: step height
+          create_KeyValue('2101', convert_to_cm(tags->>'height'))
       END)
       )
     -- elevator:
@@ -252,8 +330,8 @@ SELECT create_keyList(xmlconcat(
       --),
       -- 2133: escalator changing direction
       delfi_attribute_check_values_xml('2133', tags->>'conveying', 'reversible'),
-      -- 2134: escalator duration in s (TODO: convert to duration in seconds)
-      create_KeyValue('2134', tags->>'duration')
+      -- 2134: escalator duration in s
+      create_KeyValue('2134', convert_to_seconds(tags->>'duration', $2))
       )
     -- ramp/slope:
     WHEN tags->>'highway' = 'footway' AND tags->>'incline' IS NOT NULL THEN
@@ -264,8 +342,8 @@ SELECT create_keyList(xmlconcat(
       -- create_KeyValue('2122', tags->>), -- aus geometrie oder attribut möglich
       -- 2123: ramp width
       create_KeyValue('2123', tags->>'width'),
-      -- 2124: ramp slope (TODO: convert slope to degrees)
-      create_KeyValue('2124', tags->>'incline')
+      -- 2124: ramp slope
+      create_KeyValue('2124', convert_to_degrees(tags->>'incline'))
       )
   END)
 ));
