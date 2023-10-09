@@ -29,13 +29,13 @@ BEGIN
   -- check, if the length of the array is 1 and is a number --> value should be given as meters
   IF array_length(value_split, 1) = 1 AND value ~ '^[0-9]+(\.[0-9]+)?$' THEN
     -- convert the input to centimeters
-    result := (value::real * 100)::text;
+    result := (value::numeric * 100)::text;
   -- check, if the length of the array is 2 and the first element is a number --> value should be given as '<value> <unit>'
   ELSEIF array_length(value_split, 1) = 2 AND value_split[1] ~ '^[0-9]+(\.[0-9]+)?$' THEN
     -- check, if the unit is 'm'
     IF value_split[2] = 'm' THEN
       -- convert the input to centimeters
-      result := (value_split[1]::real * 100)::text;
+      result := (value_split[1]::numeric * 100)::text;
     ELSEIF value_split[2] = 'cm' THEN
       result := value_split[1];
     END IF;
@@ -236,7 +236,7 @@ SELECT create_keyList(xmlconcat(
   delfi_attribute_check_values_xml('1150', tags->>'announcement'),
   -- 1170: height difference between the platform and the road respectively the top edge of the rail
   create_KeyValue('1170', convert_to_cm(tags->>'height')),
-  -- 1180: curb/platform width
+  -- 1180: platform width
   create_KeyValue('1180', convert_to_cm(tags->>'width'))
   -- 1190: distance between platform edge and center of track
   --create_KeyValue('1190', tags->>''),
@@ -296,7 +296,7 @@ SELECT create_keyList(xmlconcat(
         WHEN tags->>'kerb:height' IS NOT NULL THEN
           -- 2101: step height
           create_KeyValue('2101', convert_to_cm(tags->>'kerb:height'))
-        WHEN tags->>'kerb:height' IS NULL THEN  -- CHECKEN, OB DAS SO GEHT, sonst: WHEN tags->>'kerb:height' IS NULL THEN
+        WHEN tags->>'kerb:height' IS NULL THEN
           -- 2101: step height
           create_KeyValue('2101', convert_to_cm(tags->>'height'))
       END)
@@ -392,7 +392,7 @@ SELECT create_keyList(xmlconcat(
   -- 2030: entrance
   delfi_attribute_check_values_xml('2030', tags->>'entrance'),
   -- 2031: opening hours
-  delfi_attribute_check_values_xml('2031', tags->>'opening_hours'),
+  --delfi_attribute_check_values_xml('2031', tags->>'opening_hours'),
   -- 2032: type of entrance:
   create_KeyValue('2032',
     (SELECT CASE
@@ -1080,19 +1080,24 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
 /*
  * Final site path link view
  * The tables "paths_elements_ref" and "highways" are joined to create a view that contains all path links with their osm tags.
- * Only one element of the "paths_elements_ref" table is joined to be able to later generate the xml field "accessFeatureType".
- * There should be no case where an access feature (stairs, ...) is composed of multiple OSM elements.
+ * All elements (ways and nodes) of the "paths_elements_ref" table are joined to be able to later generate the xml field "accessFeatureType"
+ * and to be able to extract the delfi attributes out of the tags.
+ * There should be no case where a path link is composed of multiple access features (stairs, ...) so that a correct assignment to an accessFeatureType can be made.
  */
 CREATE OR REPLACE VIEW final_site_path_links AS (
   -- use distinct to filter any duplicated joined paths
   SELECT DISTINCT ON (pl.path_id)
     -- fallback to empty tags if no matching element exists
-    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(highways.tags, '{}'::jsonb) as tags, pl.geom, pl.level, start_node_id as "from", end_node_id as "to"
+    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(hw.tags, '{}'::jsonb) as tags, pl.geom, pl.level, start_node_id as "from", end_node_id as "to"
   FROM path_links pl
-  LEFT JOIN paths_elements_ref per
-    ON per.path_id = pl.path_id 
-  LEFT JOIN highways
-    ON highways.osm_id = per.osm_id AND highways.osm_type = per.osm_type
+  LEFT JOIN (
+    SELECT DISTINCT per.path_id, jsonb_combine(highways.tags) as tags
+    FROM paths_elements_ref per
+    LEFT JOIN highways
+      ON highways.osm_id = per.osm_id AND highways.osm_type = per.osm_type
+    GROUP BY per.path_id
+  ) AS hw 
+  ON hw.path_id = pl.path_id
 );
 
 

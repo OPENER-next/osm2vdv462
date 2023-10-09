@@ -21,6 +21,8 @@ def insertPathsElementsRef(cur, pathId, edges):
     # ways with id == 0 are additional edges generated from PPR, that are part of the path
     # those are not inserted into the paths_elements_ref database, because they won't add additional tags to the path
     # crossed ways (negative osm way id) are included, but only the absolute value (the crossed way) is inserted
+    
+    *_, lastEdge = edges # get the last element of the list
 
     for edge in edges:
         if edge["edge_type"] == "crossing":
@@ -54,6 +56,10 @@ def insertPathsElementsRef(cur, pathId, edges):
             # "normal" case (footpath and street): insert the osm way id of the edge
             if edge["osm_way_id"] != 0:
                 insertPathsElementsRefSQL(cur, pathId, 'W', abs(edge["osm_way_id"]))
+            # also insert the node at the end of the edge to also get crossing nodes, ...
+            # the last node should not be included, otherwise elevator nodes would be included in the path
+            if edge["to_node_osm_id"] != 0 and edge != lastEdge:
+                insertPathsElementsRefSQL(cur, pathId, 'N', edge["to_node_osm_id"])
 
 
 def insertPathLink(cur, relation_id, pathLink, id_from, id_to, level):
