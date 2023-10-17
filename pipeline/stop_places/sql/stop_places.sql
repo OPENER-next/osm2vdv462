@@ -233,7 +233,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create a single key value pair element
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_KeyValue(a text, b anyelement) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_KeyValue(a text, b anynonarray) RETURNS xml AS
 $$
 SELECT xmlelement(name "KeyValue",
   xmlelement(name "Key", $1),
@@ -251,7 +251,7 @@ CREATE OR REPLACE FUNCTION delfi_attribute_check_values_xml(delfiid text, val te
 $$
 BEGIN
   IF val = ANY (vals) THEN
-    RETURN create_KeyValue(delfiid, '');
+    RETURN create_KeyValue(delfiid, ''::text);
   END IF;
   RETURN NULL;
 END
@@ -310,10 +310,10 @@ SELECT create_keyList(xmlconcat(
   (SELECT CASE
     WHEN tags->>'kerb' IN ('yes', 'raised') AND tags->>'kerb:approach_aid' = 'yes' THEN
       -- 1200: high curb with track guidance
-      create_KeyValue('1200', '')
+      create_KeyValue('1200', ''::text)
     WHEN tags->>'kerb' IN ('yes', 'raised') THEN
       -- 1202: high curb without track guidance
-      create_KeyValue('1202', '')
+      create_KeyValue('1202', ''::text)
   END),
   -- 1210: portable ramp exists
   delfi_attribute_check_values_xml('1210', tags->>'ramp:portable'),
@@ -357,7 +357,7 @@ SELECT create_keyList(xmlconcat(
     WHEN tags->>'highway' = 'elevator' THEN
       xmlconcat(
         -- 2090: lift
-        create_KeyValue('2090', ''),
+        create_KeyValue('2090', ''::text),
         -- 2092: footprint area of the lift
         create_KeyValue(
           '2092',
@@ -373,7 +373,7 @@ SELECT create_keyList(xmlconcat(
     WHEN tags->>'highway' = 'steps' AND tags->>'conveying' IS NULL THEN
       xmlconcat(
         -- 2110: stairs
-        create_KeyValue('2110', ''),
+        create_KeyValue('2110', ''::text),
         -- 2112: step height
         create_KeyValue('2112', parse_length(tags->>'step:height')),
         -- 2113: number of steps
@@ -383,14 +383,14 @@ SELECT create_keyList(xmlconcat(
     WHEN tags->>'highway' = 'steps' AND tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible') THEN
       xmlconcat(
         -- 2130: escalator
-        create_KeyValue('2130', ''),
+        create_KeyValue('2130', ''::text),
         -- 2132: escalator direction
         create_KeyValue('2132', (
           SELECT CASE
-            WHEN tags->>'conveying' = 'forward' AND tags->>'incline' = 'up' THEN 'aufwärts'
-            WHEN tags->>'conveying' = 'forward' AND tags->>'incline' = 'down' THEN 'abwärts'
-            WHEN tags->>'conveying' = 'backward' AND tags->>'incline' = 'up' THEN 'abwärts'
-            WHEN tags->>'conveying' = 'backward' AND tags->>'incline' = 'down' THEN 'aufwärts'
+            WHEN tags->>'conveying' = 'forward' AND tags->>'incline' = 'up' THEN 'aufwärts'::text
+            WHEN tags->>'conveying' = 'forward' AND tags->>'incline' = 'down' THEN 'abwärts'::text
+            WHEN tags->>'conveying' = 'backward' AND tags->>'incline' = 'up' THEN 'abwärts'::text
+            WHEN tags->>'conveying' = 'backward' AND tags->>'incline' = 'down' THEN 'aufwärts'::text
           END
         )),
         -- 2133: escalator changing direction
@@ -405,7 +405,7 @@ SELECT create_keyList(xmlconcat(
     WHEN tags->>'highway' IN ('path', 'footway', 'cycleway') AND tags->>'incline' IS NOT NULL AND parse_incline(tags->>'incline') <> 0 THEN
       xmlconcat(
         -- 2120: ramp or slope
-        create_KeyValue('2120', ''),
+        create_KeyValue('2120', ''::text),
         -- 2122: ramp length in centimeter
         create_KeyValue('2122', TRUNC(calculate_Distance(geo) * 100)),
         -- 2123: ramp width
@@ -471,6 +471,16 @@ $$
 LANGUAGE SQL IMMUTABLE;
 
 
+
+
+-- check ramp export
+
+-- TODOOOOOOOOOOOOOO: access spaces zu osm elementen joine
+
+
+
+
+
 /*
  * Create a keyList element for entrances based on a delfi attribut to osm matching
  * Optionally additional key value pairs can be passed to the function
@@ -487,19 +497,19 @@ SELECT create_keyList(xmlconcat(
   -- 2032: type of entrance:
   create_KeyValue('2032',
     (SELECT CASE
-      WHEN tags->>'door' = 'yes' THEN 'Tür'
-      WHEN tags->>'door' = 'hinged' THEN 'Anschlagtür'
-      WHEN tags->>'door' = 'sliding' THEN 'Schiebetür'
-      WHEN tags->>'door' = 'revolving' THEN 'Drehtür'
-      WHEN tags->>'door' = 'swinging' THEN 'Pendeltür'
+      WHEN tags->>'door' = 'yes' THEN 'Tür'::text
+      WHEN tags->>'door' = 'hinged' THEN 'Anschlagtür'::text
+      WHEN tags->>'door' = 'sliding' THEN 'Schiebetür'::text
+      WHEN tags->>'door' = 'revolving' THEN 'Drehtür'::text
+      WHEN tags->>'door' = 'swinging' THEN 'Pendeltür'::text
     END)
   ),
   -- 2033: type of door opening:
   create_KeyValue('2033',
     (SELECT CASE
-      WHEN tags->>'automatic_door' = 'yes' THEN 'automatisch'
-      WHEN tags->>'automatic_door' = 'button' THEN 'halbautomatisch'
-      WHEN tags->>'automatic_door' = 'motion' THEN 'automatisch'
+      WHEN tags->>'automatic_door' = 'yes' THEN 'automatisch'::text
+      WHEN tags->>'automatic_door' = 'button' THEN 'halbautomatisch'::text
+      WHEN tags->>'automatic_door' = 'motion' THEN 'automatisch'::text
     END)
   ),
   -- 2034: door width
