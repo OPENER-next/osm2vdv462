@@ -233,7 +233,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create a single key value pair element
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_KeyValue(a text, b text) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_KeyValue(a text, b anyelement) RETURNS xml AS
 $$
 SELECT xmlelement(name "KeyValue",
   xmlelement(name "Key", $1),
