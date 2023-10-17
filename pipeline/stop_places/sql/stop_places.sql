@@ -471,16 +471,6 @@ $$
 LANGUAGE SQL IMMUTABLE;
 
 
-
-
--- check ramp export
-
--- TODOOOOOOOOOOOOOO: access spaces zu osm elementen joine
-
-
-
-
-
 /*
  * Create a keyList element for entrances based on a delfi attribut to osm matching
  * Optionally additional key value pairs can be passed to the function
