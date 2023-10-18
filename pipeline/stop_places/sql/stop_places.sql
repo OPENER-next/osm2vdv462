@@ -481,9 +481,7 @@ $$
 SELECT create_keyList(xmlconcat(
   additionalPairs,
   -- 2030: entrance
-  delfi_attribute_check_values_xml('2030', tags->>'entrance'),
-  -- 2031: opening hours
-  --delfi_attribute_check_values_xml('2031', tags->>'opening_hours'),
+  create_KeyValue('2030', ''::text),
   -- 2032: type of entrance:
   create_KeyValue('2032',
     (SELECT CASE
@@ -503,7 +501,13 @@ SELECT create_keyList(xmlconcat(
     END)
   ),
   -- 2034: door width
-  create_KeyValue('2034', tags->>'width')
+  create_KeyValue('2034', parse_length(COALESCE(
+    tags->>'maxwidth:physical',
+    tags->>'width',
+    tags->>'door:width'
+  )))
+  -- Missing:
+  -- 2031: opening hours
 ));
 $$
 LANGUAGE SQL IMMUTABLE;
