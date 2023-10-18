@@ -3,6 +3,164 @@
  ********************/
 
 /*
+ * Return the distance of a given geometry in meters, rounded to 6 decimal places
+ */
+CREATE OR REPLACE FUNCTION calculate_Distance(geo geometry) RETURNS real AS
+$$
+SELECT ST_Length(
+  ST_Transform($1, current_setting('export.PROJECTION')::INT)::geography
+)
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Convert the input to centimeters
+ * Returns null when the conversion fails or the input is null
+ */
+CREATE OR REPLACE FUNCTION parse_length(value TEXT) RETURNS NUMERIC AS
+$$
+DECLARE
+  value_split TEXT[];
+BEGIN
+  -- split the input string into an array if it contains a space
+  value_split := string_to_array(value, ' ');
+  -- try casting/parsing to NUMERIC and catch in case of failure
+  BEGIN
+    -- check, if the unit is 'm', or has no unit defined
+    IF value_split[2] = 'm' OR value_split[2] IS NULL THEN
+      RETURN value_split[1]::NUMERIC * 100;
+    ELSEIF value_split[2] = 'cm' THEN
+      RETURN value_split[1]::NUMERIC;
+    ELSE
+      RAISE NOTICE 'Unknown length unit detected: "%".  Returning NULL.', value;
+      RETURN NULL;
+    END IF;
+  -- catch casting exceptions
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Invalid length value: "%".  Returning NULL.', value;
+    RETURN NULL;
+  END;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Create a function, that converts a duration string to the xsd:duration format.
+ * The output format is globally set to iso_8601 in the setup pipeline step.
+ * Returns null when no duration can be parsed
+ */
+CREATE OR REPLACE FUNCTION parse_duration(duration text) RETURNS INTERVAL AS
+$$
+BEGIN
+  -- check if the duration text only consists of numbers --> special case for minutes
+  IF duration ~ '^[0-9]+$' THEN
+    RETURN (duration || ' minutes')::INTERVAL;
+  ELSE
+    BEGIN
+      RETURN duration::INTERVAL;
+    EXCEPTION
+      WHEN invalid_datetime_format THEN
+        -- conversion failed
+        RETURN NULL;
+    END;
+  END IF;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Convert the input to kilograms
+ * Returns null when the conversion fails or the input is null
+ */
+CREATE OR REPLACE FUNCTION parse_weight(value text) RETURNS NUMERIC AS
+$$
+DECLARE
+  value_split TEXT[];
+BEGIN
+  -- split the input string into an array if it contains a space
+  value_split := string_to_array(value, ' ');
+  -- try casting/parsing to NUMERIC and catch in case of failure
+  BEGIN
+    -- check, if the unit is 't', or has no unit defined
+    IF value_split[2] = 't' OR value_split[2] IS NULL THEN
+      RETURN value_split[1]::NUMERIC * 1000;
+    ELSEIF value_split[2] = 'kg' THEN
+      RETURN value_split[1]::NUMERIC;
+    ELSEIF value_split[2] = 'g' THEN
+      RETURN value_split[1]::NUMERIC / 1000;
+    ELSE
+      RAISE NOTICE 'Unknown weight unit detected: "%".  Returning NULL.', value;
+      RETURN NULL;
+    END IF;
+  -- catch casting exceptions
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Invalid weight value: "%".  Returning NULL.', value;
+    RETURN NULL;
+  END;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Convert the input to degrees
+ * Returns null when the conversion fails or the input is null
+ */
+CREATE OR REPLACE FUNCTION parse_incline(value text) RETURNS NUMERIC AS
+$$
+DECLARE
+  unit char;
+BEGIN
+  IF value IN ('up', 'down') THEN
+    RETURN NULL;
+  END IF;
+  -- get the unit of the string
+  unit := RIGHT(value, 1);
+  -- try casting/parsing to NUMERIC and catch in case of failure
+  BEGIN
+    IF unit = '%' THEN
+      RETURN LEFT(value, -1)::NUMERIC;
+    ELSEIF unit = '°' THEN
+      RETURN TAN(RADIANS(LEFT(value, -1)::NUMERIC)) * 100;
+    ELSE
+      RAISE NOTICE 'Unknown incline unit detected: "%".  Returning NULL.', value;
+      RETURN NULL;
+    END IF;
+  -- catch casting exceptions
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Invalid incline value: "%".  Returning NULL.', value;
+    RETURN NULL;
+  END;
+END
+$$
+LANGUAGE plpgsql IMMUTABLE STRICT;
+
+
+/*
+ * Create a function, that estimates the duration in seconds based on the length of the path link.
+ * Returns the seconds as integer (rounded up to the next integer).
+ * Special case elevator: the duration is estimated based on the number of levels that are passed.
+ */
+CREATE OR REPLACE FUNCTION estimate_duration(tags jsonb, geo geometry, level NUMERIC, walking_speed NUMERIC) RETURNS INTERVAL AS
+$$
+SELECT
+  CASE
+    WHEN tags->>'highway' = 'elevator' THEN
+      CASE
+        WHEN level = 0 THEN make_interval(secs => 60) -- return 60 seconds as a fallback
+        ELSE make_interval(secs => 30 + ABS(level) * 10) -- estimation: 10 seconds per level plus 30 seconds for entering and leaving the elevator
+      END
+    ELSE
+      make_interval(secs => (calculate_Distance(geo) / walking_speed))
+  END
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
  * Create a centroid element from any geography
  * Returns null when any argument is null
  */
@@ -46,11 +204,9 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create a Distance element from a line string
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_Distance(a geometry) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_Distance(geo geometry) RETURNS xml AS
 $$
-SELECT xmlelement(name "Distance", ST_Length(
-  ST_Transform($1, current_setting('export.PROJECTION')::int)::geography
-))
+SELECT xmlelement(name "Distance", calculate_Distance($1))
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -77,7 +233,7 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Create a single key value pair element
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION create_KeyValue(a anyelement, b anyelement) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_KeyValue(a text, b anynonarray) RETURNS xml AS
 $$
 SELECT xmlelement(name "KeyValue",
   xmlelement(name "Key", $1),
@@ -88,16 +244,19 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a single key value pair element where value is empty if the given tag value equals "yes"
+ * Create a single key value pair element where the value is empty if the given tag value equals to one of the given values
  * Else returns null
  */
-CREATE OR REPLACE FUNCTION delfi_attribute_on_yes_xml(delfiid text, val text) RETURNS xml AS
+CREATE OR REPLACE FUNCTION delfi_attribute_check_values_xml(delfiid text, val text, VARIADIC vals text[] DEFAULT ARRAY['yes']) RETURNS xml AS
 $$
-SELECT CASE
-  WHEN $2 = 'yes' THEN create_KeyValue($1, '')
+BEGIN
+  IF val = ANY (vals) THEN
+    RETURN create_KeyValue(delfiid, ''::text);
+  END IF;
+  RETURN NULL;
 END
 $$
-LANGUAGE SQL IMMUTABLE STRICT;
+LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 /*
@@ -105,26 +264,261 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Optionally additional key value pairs can be passed to the function
  * Returns null when no tag matching exists
  */
-CREATE OR REPLACE FUNCTION ex_keyList(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+CREATE OR REPLACE FUNCTION create_keyList(keys xml) RETURNS xml AS
 $$
-DECLARE
-  result xml;
-BEGIN
-  result := xmlconcat(
-    additionalPairs,
-    delfi_attribute_on_yes_xml('1120', tags->>'bench'),
-    delfi_attribute_on_yes_xml('1140', tags->>'passenger_information_display'),
-    delfi_attribute_on_yes_xml('1141', tags->>'passenger_information_display:speech_output')
-  );
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "keyList", result);
-  END IF;
-
-  RETURN NULL;
-END
+SELECT xmlelement(name "keyList", $1);
 $$
-LANGUAGE plpgsql IMMUTABLE;
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
+ * Create a keyList element for stop places based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_StopPlace(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+SELECT create_keyList(xmlconcat(
+  $2
+));
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a keyList element for quays based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_Quay(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+SELECT create_keyList(xmlconcat(
+  additionalPairs,
+  -- 1120: waiting area with seat
+  delfi_attribute_check_values_xml('1120', tags->>'bench'),
+  -- 1140: dynamic visual passenger information display
+  delfi_attribute_check_values_xml('1140', tags->>'passenger_information_display'),
+  -- 1141: with acoustic output
+  delfi_attribute_check_values_xml('1141', tags->>'passenger_information_display:speech_output'),
+  -- 1150: automatic announcements
+  delfi_attribute_check_values_xml('1150', tags->>'announcement'),
+  -- 1170: height difference between the platform and the road respectively the top edge of the rail
+  create_KeyValue('1170', parse_length(tags->>'height')),
+  -- 1180: platform width
+  -- "est_width" is a valid OSM tag, however the view "platforms_with_width" also writes this tag for polygons
+  create_KeyValue('1180', parse_length(COALESCE(tags->>'width', tags->>'est_width'))),
+  (SELECT CASE
+    WHEN tags->>'kerb' IN ('yes', 'raised') AND tags->>'kerb:approach_aid' = 'yes' THEN
+      -- 1200: high curb with track guidance
+      create_KeyValue('1200', ''::text)
+    WHEN tags->>'kerb' IN ('yes', 'raised') THEN
+      -- 1202: high curb without track guidance
+      create_KeyValue('1202', ''::text)
+  END),
+  -- 1210: portable ramp exists
+  delfi_attribute_check_values_xml('1210', tags->>'ramp:portable'),
+  -- 1210: portable ramp total length
+  create_KeyValue('1211', parse_length(tags->>'ramp:length')),
+  -- 1210: portable ramp weight limit
+  create_KeyValue('1212', parse_weight(tags->>'ramp:maxweight')),
+  -- 1220: portable platform lift exists
+  delfi_attribute_check_values_xml('1220', tags->>'platform_lift'),
+  -- 1221: portable platform lift length of the platform lift's usable space
+  create_KeyValue('1221', parse_length(tags->>'platform_lift:maxlength:physical')),
+  -- 1222: portable platform lift weight limit
+  create_KeyValue('1222', parse_weight(tags->>'platform_lift:maxweight')),
+  -- 2071: tactile/visual floor indicators in the entrance area with locating strips
+  delfi_attribute_check_values_xml('2071', tags->>'tactile_paving', 'yes', 'contrasted')
+
+  -- Missing:
+  -- 1190: distance between platform edge and center of track
+  -- 1201: high curb with track guidance and double cove
+  -- 1203: 'combiboard' with track guidance
+  -- 2140: entry in the middle of the road
+));
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a keyList element for site path links based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_SitePathLink(tags jsonb, geo geometry, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+SELECT create_keyList(xmlconcat(
+  additionalPairs,
+  -- 2072: tactile/visual floor indicators as guide strips
+  delfi_attribute_check_values_xml('2072', tags->>'tactile_paving', 'yes', 'contrasted'),
+  -- NOTE: only ONE of the below cases will return
+  (SELECT CASE
+    -- elevator:
+    WHEN tags->>'highway' = 'elevator' THEN
+      xmlconcat(
+        -- 2090: lift
+        create_KeyValue('2090', ''::text),
+        -- 2092: footprint area of the lift
+        create_KeyValue(
+          '2092',
+          -- if one value is null this will evaluate to null
+          parse_length(tags->>'length') * parse_length(tags->>'width') / 100
+        ),
+        -- 2093: footprint length of the lift
+        create_KeyValue('2093',  parse_length(tags->>'length')),
+        -- 2094: footprint width of the lift
+        create_KeyValue('2094',  parse_length(tags->>'width'))
+      )
+    -- stairs:
+    WHEN tags->>'highway' = 'steps' AND tags->>'conveying' IS NULL THEN
+      xmlconcat(
+        -- 2110: stairs
+        create_KeyValue('2110', ''::text),
+        -- 2112: step height
+        create_KeyValue('2112', parse_length(tags->>'step:height')),
+        -- 2113: number of steps
+        create_KeyValue('2113', tags->>'step_count')
+      )
+    -- escalator:
+    WHEN tags->>'highway' = 'steps' AND tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible') THEN
+      xmlconcat(
+        -- 2130: escalator
+        create_KeyValue('2130', ''::text),
+        -- 2132: escalator direction
+        create_KeyValue('2132', (
+          SELECT CASE
+            WHEN tags->>'conveying' = 'forward' AND tags->>'incline' = 'up' THEN 'aufwärts'::text
+            WHEN tags->>'conveying' = 'forward' AND tags->>'incline' = 'down' THEN 'abwärts'::text
+            WHEN tags->>'conveying' = 'backward' AND tags->>'incline' = 'up' THEN 'abwärts'::text
+            WHEN tags->>'conveying' = 'backward' AND tags->>'incline' = 'down' THEN 'aufwärts'::text
+          END
+        )),
+        -- 2133: escalator changing direction
+        delfi_attribute_check_values_xml('2133', tags->>'conveying', 'reversible'),
+        -- 2134: escalator duration in seconds
+        create_KeyValue(
+          '2134',
+          TRUNC(EXTRACT(epoch FROM parse_duration(tags->>'duration')))
+        )
+      )
+    -- ramp/slope:
+    WHEN tags->>'highway' IN ('path', 'footway', 'cycleway') AND tags->>'incline' IS NOT NULL AND parse_incline(tags->>'incline') <> 0 THEN
+      xmlconcat(
+        -- 2120: ramp or slope
+        create_KeyValue('2120', ''::text),
+        -- 2122: ramp length in centimeter
+        create_KeyValue('2122', TRUNC(calculate_Distance(geo) * 100)),
+        -- 2123: ramp width
+        create_KeyValue('2123', parse_length(tags->>'width')),
+        -- 2124: ramp slope
+        create_KeyValue('2124', parse_incline(tags->>'incline'))
+      )
+    ELSE
+      xmlconcat(
+        -- 2020: length of the same level way in centimeter
+        create_KeyValue('2020', TRUNC(calculate_Distance(geo) * 100)),
+        -- 2021: width of the same level way
+        create_KeyValue('2021', parse_length(tags->>'width')),
+        -- 2040: track crossing required (level platform access)
+        delfi_attribute_check_values_xml('2040', tags->>'railway', 'crossing', 'tram_crossing'),
+        -- 2050: unpaved ground
+        delfi_attribute_check_values_xml(
+          '2050',
+          tags->>'surface',
+          'unpaved', 'compacted', 'fine_gravel', 'gravel', 'shells', 'rock', 'ground', 'dirt', 'earth', 'grass', 'sand', 'woodchips'
+        ),
+        -- 2100: step
+        COALESCE(
+          delfi_attribute_check_values_xml('2100', tags->>'barrier', 'kerb', 'step'),
+          delfi_attribute_check_values_xml('2100', tags->>'kerb', 'raised', 'rolled', 'yes')
+        ),
+        -- 2101: step height
+        create_KeyValue('2101', parse_length(
+          COALESCE(tags->>'kerb:height', tags->>'step:height')
+        ))
+      )
+  END)
+));
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a keyList element for access spaces based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_AccessSpace(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+SELECT create_keyList(xmlconcat(
+  additionalPairs,
+  -- 2080: bicycle barrier
+  COALESCE(
+    delfi_attribute_check_values_xml('2080', tags->>'barrier', 'cycle_barrier'),
+    delfi_attribute_check_values_xml('2080', tags->>'crossing:chicane')
+  ),
+  -- 2081: movement area into, through and out of the narrow section
+  -- delfi_attribute_check_values_xml('2081', tags->>),
+  -- 2091: door width of the elevator
+  -- just the entry (door) of the elevator is considered as an access space
+  create_KeyValue('2091',
+    (SELECT CASE
+      WHEN tags->>'door' IS NOT NULL THEN tags->>'width'
+    END)
+  )
+));
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a keyList element for entrances based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_Entrance(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+SELECT create_keyList(xmlconcat(
+  additionalPairs,
+  -- 2030: entrance
+  delfi_attribute_check_values_xml('2030', tags->>'entrance'),
+  -- 2031: opening hours
+  --delfi_attribute_check_values_xml('2031', tags->>'opening_hours'),
+  -- 2032: type of entrance:
+  create_KeyValue('2032',
+    (SELECT CASE
+      WHEN tags->>'door' = 'yes' THEN 'Tür'::text
+      WHEN tags->>'door' = 'hinged' THEN 'Anschlagtür'::text
+      WHEN tags->>'door' = 'sliding' THEN 'Schiebetür'::text
+      WHEN tags->>'door' = 'revolving' THEN 'Drehtür'::text
+      WHEN tags->>'door' = 'swinging' THEN 'Pendeltür'::text
+    END)
+  ),
+  -- 2033: type of door opening:
+  create_KeyValue('2033',
+    (SELECT CASE
+      WHEN tags->>'automatic_door' = 'yes' THEN 'automatisch'::text
+      WHEN tags->>'automatic_door' = 'button' THEN 'halbautomatisch'::text
+      WHEN tags->>'automatic_door' = 'motion' THEN 'automatisch'::text
+    END)
+  ),
+  -- 2034: door width
+  create_KeyValue('2034', tags->>'width')
+));
+$$
+LANGUAGE SQL IMMUTABLE;
+
+
+/*
+ * Create a keyList element based on a delfi attribut to osm matching
+ * Optionally additional key value pairs can be passed to the function
+ * Returns null when no tag matching exists
+ */
+CREATE OR REPLACE FUNCTION ex_keyList_Parking(tags jsonb, additionalPairs xml DEFAULT NULL) RETURNS xml AS
+$$
+SELECT create_keyList($2);
+$$
+LANGUAGE SQL IMMUTABLE;
 
 
 /*
@@ -532,54 +926,6 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a function, that converts a duration string to the xsd:duration format.
- * The output format is globally set to iso_8601 in the setup pipeline step.
- * Returns null when no duration can be parsed
- */
-CREATE OR REPLACE FUNCTION extract_duration(duration text) RETURNS INTERVAL AS
-$$
-BEGIN
-  -- check if the duration text only consists of numbers --> special case for minutes
-  IF duration ~ '^[0-9]+$' THEN
-    RETURN (duration || ' minutes')::INTERVAL;
-  ELSE
-    BEGIN
-      RETURN duration::INTERVAL;
-    EXCEPTION
-      WHEN invalid_datetime_format THEN
-        -- conversion failed
-        RETURN NULL;
-    END;
-  END IF;
-END
-$$
-LANGUAGE plpgsql IMMUTABLE STRICT;
-
-
-/* 
- * Create a function, that estimates the duration in seconds based on the length of the path link.
- * Returns the seconds as integer (rounded up to the next integer).
- * Special case elevator: the duration is estimated based on the number of levels that are passed.
- */
-CREATE OR REPLACE FUNCTION estimate_duration(tags jsonb, geo geometry, level NUMERIC, walking_speed NUMERIC) RETURNS INTERVAL AS
-$$
-SELECT
-  CASE
-    WHEN tags->>'highway' = 'elevator' THEN
-      CASE
-        WHEN level = 0 THEN make_interval(secs => 60) -- return 60 seconds as a fallback
-        ELSE make_interval(secs => 30 + ABS(level) * 10) -- estimation: 10 seconds per level plus 30 seconds for entering and leaving the elevator
-      END
-    ELSE
-      make_interval(secs => (ST_Length(
-        ST_Transform(geo, current_setting('export.PROJECTION')::INT)::geography
-      ) / walking_speed))
-  END
-$$
-LANGUAGE SQL IMMUTABLE STRICT;
-
-
-/*
  * Create a TransferDuration element based on the tags: duration.
  * If no duration tag is present, the duration is calculated from the length of the path link.
  * The duration is saved in the xsd:duration format.
@@ -589,7 +935,7 @@ $$
 DECLARE
   duration interval;
 BEGIN
-  duration := extract_duration($1->>'duration');
+  duration := parse_duration($1->>'duration');
   IF duration IS NULL THEN
     duration := estimate_duration($1, $2, $3, 1.4);
   END IF;
@@ -612,7 +958,7 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * 'jsonb_agg' combines the objects into an array, which is not what we want.
  * See: https://stackoverflow.com/questions/57249804/combine-multiple-json-rows-into-one-json-object-in-postgresql
  */
-CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb) 
+CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
 (
     SFUNC = jsonb_concat(jsonb, jsonb),
     STYPE = jsonb
@@ -686,12 +1032,68 @@ CREATE OR REPLACE VIEW platforms_merged AS (
   GROUP BY p1."IFOPT", p1.cluster_id
 );
 
+
+/*
+ * This view sub divides the polygon into simple sub-polygons (ST_Subdivide)
+ * Wraps rectangles around each sub-polygon (ST_OrientedEnvelope)
+ * Takes the rectangle with the longest side - assuming the side is to the road/track (ST_DumpSegments + MAX length)
+ * Return the shorter side (width) from the selected rectangle (MIN width)
+ * Inspired by https://gis.stackexchange.com/a/364502
+ * NOTE: This is implemented as a view, because it turned out to be way slower as an individual function call
+ * Other ideas:
+ * How to find the maximum-area-rectangle inside a convex polygon?
+ * https://gis.stackexchange.com/questions/59215/how-to-find-the-maximum-area-rectangle-inside-a-convex-polygon
+ * Calculating average width of polygon?
+ * https://gis.stackexchange.com/questions/20279/calculating-average-width-of-polygon
+ * Width could also be calculated by using ST_MaximumInscribedCircle. However this would return the largest width and not the "average"
+ * https://postgis.net/docs/ST_MaximumInscribedCircle.html
+*/
+CREATE OR REPLACE VIEW platforms_with_width AS (
+  SELECT
+    osm_id, osm_type, "IFOPT", q.geom,
+    CASE
+      -- only write "est_width" for polygons
+      WHEN ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
+        jsonb_set(q.tags, '{est_width}', to_jsonb(width))
+      ELSE
+        q.tags
+    END
+  FROM (
+    SELECT DISTINCT ON (osm_id, osm_type)
+      q.*,
+      -- smaller sub-envelope side
+      MIN(calculate_Distance(s.geom)) width,
+      -- larger sub-envelope side
+      MAX(calculate_Distance(s.geom)) length
+    FROM (
+      SELECT
+        platforms_merged.*,
+        ST_OrientedEnvelope(
+          ST_Subdivide(
+            -- remove obsolete points to improve subdivide
+            ST_SimplifyPreserveTopology(geom, 0.000001), 5
+          )
+        ) AS envelope_geom
+      FROM platforms_merged
+    ) q
+    -- split envelopes into individual line segments to measure their length
+    -- use left join so source rows will appear in the result even if the LATERAL subquery produces no rows for them
+    LEFT JOIN LATERAL ST_DumpSegments(envelope_geom) s ON true
+    -- group by envelope geom to get envelope width and length
+    GROUP BY osm_id, osm_type, "IFOPT", q.geom, tags, envelope_geom
+    -- DISTINCT will only take the first row, therefore sort it by length
+    -- so the row with the longest side is used
+    ORDER BY osm_id, osm_type, length DESC
+  ) q
+);
+
+
 /*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*, get_Level(pts.tags) AS "level"
-  FROM platforms_merged pts
+  FROM platforms_with_width pts
   JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
@@ -779,19 +1181,24 @@ CREATE OR REPLACE VIEW stop_area_elements AS (
 /*
  * Final site path link view
  * The tables "paths_elements_ref" and "highways" are joined to create a view that contains all path links with their osm tags.
- * Only one element of the "paths_elements_ref" table is joined to be able to later generate the xml field "accessFeatureType".
- * There should be no case where an access feature (stairs, ...) is composed of multiple OSM elements.
+ * All elements (ways and nodes) of the "paths_elements_ref" table are joined to be able to later generate the xml field "accessFeatureType"
+ * and to be able to extract the delfi attributes out of the tags.
+ * There should be no case where a path link is composed of multiple access features (stairs, ...) so that a correct assignment to an accessFeatureType can be made.
  */
 CREATE OR REPLACE VIEW final_site_path_links AS (
   -- use distinct to filter any duplicated joined paths
   SELECT DISTINCT ON (pl.path_id)
     -- fallback to empty tags if no matching element exists
-    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(highways.tags, '{}'::jsonb) as tags, pl.geom, pl.level, start_node_id as "from", end_node_id as "to"
+    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(hw.tags, '{}'::jsonb) as tags, pl.geom, pl.level, start_node_id as "from", end_node_id as "to"
   FROM path_links pl
-  LEFT JOIN paths_elements_ref per
-    ON per.path_id = pl.path_id 
-  LEFT JOIN highways
-    ON highways.osm_id = per.osm_id AND highways.osm_type = per.osm_type
+  LEFT JOIN (
+    SELECT DISTINCT per.path_id, jsonb_combine(highways.tags) as tags
+    FROM paths_elements_ref per
+    LEFT JOIN highways
+      ON highways.osm_id = per.osm_id AND highways.osm_type = per.osm_type
+    GROUP BY per.path_id
+  ) AS hw
+  ON hw.path_id = pl.path_id
 );
 
 
@@ -946,7 +1353,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
   -- <StopPlace>
   xmlelement(name "StopPlace", xmlattributes(ex.area_id AS "id", 'any' AS "version"),
     -- <keyList>
-    ex_keyList(ex.area_tags),
+    ex_keyList_StopPlace(ex.area_tags),
     -- <Name>
     ex_Name(ex.area_tags),
     -- <ShortName>
@@ -984,7 +1391,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <Quay>
           xmlelement(name "Quay", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_Quay(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <ShortName>
@@ -1004,7 +1411,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <Entrance>
           xmlelement(name "Entrance", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_Entrance(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <Centroid>
@@ -1022,7 +1429,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <AccessSpace>
           xmlelement(name "AccessSpace", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_AccessSpace(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <Centroid>
@@ -1040,7 +1447,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <Parking>
           xmlelement(name "Parking", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_Parking(ex.tags),
             -- <Name>
             ex_Name(ex.tags),
             -- <Centroid>
@@ -1061,7 +1468,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
           -- <SitePathLink>
           xmlelement(name "SitePathLink", xmlattributes(ex.id AS "id", 'any' AS "version"),
             -- <keyList>
-            ex_keyList(ex.tags),
+            ex_keyList_SitePathLink(ex.tags, ex.geom),
             -- <Distance>
             ex_Distance(ex.geom),
             -- <LineString>
