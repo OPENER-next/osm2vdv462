@@ -259,54 +259,43 @@ def main():
     except Exception as e:
         conn.close()
         exit(e)
-    
-    stop_area_elements = {}
+
+    stop_area_edges = None
 
     try:
-        # get all relevant stop areas
+        # get all relevant edges for stop areas
         # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
-        cur.execute(
-            'SELECT stop_area_osm_id as relation_id, category, id as "IFOPT", ST_X(geom) as lng, ST_Y(geom) as lat FROM stop_area_elements'
-        )
-        result = cur.fetchall()
-        for entry in result:
-            # create a dictionary where the keys are the relation_ids of the stop_areas
-            # and the values are a list of dictionaries containing all elements of that area
-            if entry["relation_id"] not in stop_area_elements:
-                stop_area_elements[entry["relation_id"]] = [dict(entry)]
-            else:
-                stop_area_elements[entry["relation_id"]].append(dict(entry))
+        cur.execute('''
+            SELECT relation_id,
+            "start_IFOPT", ST_X(start_geom) as start_lng, ST_Y(start_geom) as start_lat,
+            "end_IFOPT", ST_X(end_geom) as end_lng, ST_Y(end_geom) as end_lat
+            FROM stop_area_edges
+        ''')
+        stop_area_edges = result = cur.fetchall()
 
     except Exception as e:
         conn.close()
         exit(e)
 
-    # Iterate through all stop areas to get the path between the elements of this area.
-    # 'entry' is the relation_id of the stop_area
-    for entry in stop_area_elements:
-        elements = stop_area_elements[entry]
-        
-        for i in range(len(elements) - 1):
-            for ii in range(i + 1 , len(elements)):
-                
-                if elements[i]["IFOPT"] == elements[ii]["IFOPT"]:
-                    # skip if two entries with the same DHID are in the same stop_area
-                    # this should not happen after the platform merging in the stop_places step of the pipeline
-                    print(f"WARNING: Two entries with the same DHID ({elements[i]['IFOPT']})! Ignoring ...")
-                    continue
-                
-                json_data = makeRequest(url,payload,elements[i],elements[ii])
-                insertPGSQL(cur,json_data["routes"],elements[i],elements[ii])
-                
-                # generate bidirectional paths:
-                # It is questionable if special cases exist, where paths between stops/quays are different
-                # and whether it justifies double the path computation with PPR.
-                # see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
-                json_data = makeRequest(url,payload,elements[ii],elements[i])
-                insertPGSQL(cur,json_data["routes"],elements[ii],elements[i])
+    for edge in stop_area_edges:
+        edge_start = {
+            "relation_id": edge["relation_id"],
+            "IFOPT": edge["start_IFOPT"],
+            "lat": edge["start_lat"],
+            "lng": edge["start_lng"]
+        }
+        edge_end = {
+            "relation_id": edge["relation_id"],
+            "IFOPT": edge["end_IFOPT"],
+            "lat": edge["end_lat"],
+            "lng": edge["end_lng"]
+        }
+
+        json_data = makeRequest(url,payload,edge_start,edge_end)
+        insertPGSQL(cur,json_data["routes"],edge_start,edge_end)
 
         conn.commit()
-        
+
     print("Finished receiving paths from PPR!")
 
     conn.close()

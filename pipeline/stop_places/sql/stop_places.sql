@@ -1147,34 +1147,37 @@ CREATE OR REPLACE VIEW final_parkings AS (
  **************/
 
 /*
- * Mapping of stop places to elements
- * Create view that matches all elements to corresponding public transport areas.
+ * Interconnects all elements per stop area.
+ * Example: For each quay A all other quays (B, C) are assigned
+ * So the table contains the following rows: AB, AC, BA, CA, (AA is explicitly excluded in the JOIN)
+ *
+ * Because edges are directional this will contain AB and BA.
+ * It is questionable if special cases exist, where paths between stops/quays are different
+ * and whether it justifies double the path computation with PPR.
+ * see the github discussion: https://github.com/OPENER-next/osm2vdv462/pull/1#discussion_r1156836297
+ *
  * This table is used in the "routing" step of the pipeline.
  */
-CREATE OR REPLACE VIEW stop_area_elements AS (
-  SELECT
-    stop_elements.*
-  FROM (
-    SELECT
-      relation_id AS stop_area_osm_id, 'QUAY'::category AS category,
-      qua."IFOPT" AS "id",  ST_Centroid(qua.geom) AS geom
-    FROM final_quays qua
-    -- Append all Entrances to the table
-    UNION ALL
-      SELECT
-        relation_id AS stop_area_osm_id, 'ENTRANCE'::category AS category,
-        ent."IFOPT" AS "id", ST_Centroid(ent.geom) AS geom
-      FROM final_entrances ent
-    -- Append all Parking Spaces to the table
-    UNION ALL
-      SELECT
-        relation_id AS stop_area_osm_id, 'PARKING'::category AS category,
-        par."IFOPT" AS "id", ST_Centroid(par.geom) AS geom
-      FROM final_parkings par
-  ) stop_elements
-  INNER JOIN stop_areas pta
-    ON stop_elements.stop_area_osm_id = pta.relation_id
-  ORDER BY pta.relation_id
+CREATE OR REPLACE VIEW stop_area_edges AS (
+  -- permutation of all quays per relation (same as CROSS JOIN with WHERE)
+  -- will include both directions since it is a self join
+  SELECT q1.relation_id, q1."IFOPT" AS "start_IFOPT", q2."IFOPT" AS "end_IFOPT", ST_Centroid(q1.geom) AS start_geom, ST_Centroid(q2.geom) AS end_geom
+  FROM final_quays AS q1
+  INNER JOIN final_quays AS q2
+  ON q1.relation_id = q2.relation_id AND q1 != q2
+  UNION ALL
+  -- permutation of all entrances and quays per relation
+  -- first direction
+  SELECT q.relation_id, q."IFOPT" AS "start_IFOPT", e."IFOPT" AS "end_IFOPT", ST_Centroid(q.geom) AS start_geom, ST_Centroid(e.geom) AS end_geom
+  FROM final_quays AS q
+  INNER JOIN final_entrances AS e
+  ON e.relation_id = q.relation_id
+  UNION ALL
+  -- reverse direction
+  SELECT q.relation_id, e."IFOPT" AS "start_IFOPT", q."IFOPT" AS "end_IFOPT", ST_Centroid(e.geom) AS start_geom, ST_Centroid(q.geom) AS end_geom
+  FROM final_quays AS q
+  INNER JOIN final_entrances AS e
+  ON e.relation_id = q.relation_id
 );
 
 
