@@ -1107,7 +1107,7 @@ CREATE OR REPLACE VIEW final_quays AS (
  * Create view that matches all entrances to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_entrances AS (
-  SELECT ptr.relation_id, ent.*, get_Level(ent.tags) AS "level"
+  SELECT ptr.relation_id, ent.*, ent.node_id::text AS "IFOPT", get_Level(ent.tags) AS "level"
   FROM entrances ent
   JOIN stop_areas_members_ref ptr
     ON ent.node_id = ptr.member_id AND ptr.osm_type = 'N'
