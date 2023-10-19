@@ -14,7 +14,7 @@ volumes:
 
 services:
   osm2vdv462_postgis:
-    image: postgis/postgis:14-master
+    image: postgis/postgis:16-master
     container_name: osm2vdv462_postgis
     restart: unless-stopped
     networks:
