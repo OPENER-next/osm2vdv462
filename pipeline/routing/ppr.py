@@ -100,8 +100,8 @@ def insertAccessSpaces(cur, currentEdge, previousEdge, relation_id):
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
-            'INSERT INTO access_spaces (osm_id, relation_id, "level", "IFOPT", tags, geom) VALUES (%s, %s, trim_scale(%s), %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
-            (currentEdge["from_node_osm_id"], relation_id, current_level, newDHID, None, geomString)
+            'INSERT INTO access_spaces (node_id, relation_id, "level", "IFOPT", geom) VALUES (%s, %s, trim_scale(%s), %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
+            (currentEdge["from_node_osm_id"], relation_id, current_level, newDHID, geomString)
         )
     except Exception as e:
         exit(e)
@@ -136,7 +136,7 @@ def requiresAccessSpace(currentEdge, previousEdge):
     # They always have the same level, regardless of the direction. So the access spaces are identified by the level of the previous edge when going into the stairs,
     # and the level of the current edge when going out of the stairs.
     
-    special_edge_types = ["elevator"]
+    special_edge_types = ["elevator", "cycle_barrier"]
     special_street_types = ["stairs", "escalator", "moving_walkway"]
     
     edge_type = currentEdge["edge_type"]

@@ -452,13 +452,19 @@ CREATE OR REPLACE FUNCTION ex_keyList_AccessSpace(tags jsonb, additionalPairs xm
 $$
 SELECT create_keyList(xmlconcat(
   additionalPairs,
-  -- 2080: bicycle barrier
-  COALESCE(
-    delfi_attribute_check_values_xml('2080', tags->>'barrier', 'cycle_barrier'),
-    delfi_attribute_check_values_xml('2080', tags->>'crossing:chicane')
-  ),
-  -- 2081: movement area into, through and out of the narrow section
-  -- delfi_attribute_check_values_xml('2081', tags->>),
+  -- 2080: bicycle barrier opening width
+  -- 2081: bicycle barrier spacing width
+  (SELECT CASE
+    WHEN tags->>'barrier' = 'cycle_barrier' AND tags->>'cycle_barrier' IN ('single', 'tilted', 'diagonal') THEN
+      xmlconcat(
+        create_KeyValue('2080 ', parse_length(tags->>'maxwidth:physical'))
+      )
+    WHEN tags->>'barrier' = 'cycle_barrier' AND tags->>'cycle_barrier' IN ('double', 'triple') THEN
+      xmlconcat(
+        create_KeyValue('2080 ', parse_length(tags->>'opening')),
+        create_KeyValue('2081 ', parse_length(tags->>'spacing'))
+      )
+  END),
   -- 2091: door width of the elevator
   -- just the entry (door) of the elevator is considered as an access space
   create_KeyValue('2091',
@@ -1126,8 +1132,10 @@ CREATE OR REPLACE VIEW final_entrances AS (
  * Create view that matches all access spaces to public transport areas
  */
 CREATE OR REPLACE VIEW final_access_spaces AS (
-  SELECT *
-  FROM access_spaces
+  SELECT acc.*, pois.tags
+  FROM access_spaces acc
+  LEFT JOIN pois
+    ON acc.node_id = pois.osm_id AND pois.osm_type = 'N'
 );
 
 
