@@ -29,9 +29,9 @@ BEGIN
   BEGIN
     -- check, if the unit is 'm', or has no unit defined
     IF value_split[2] = 'm' OR value_split[2] IS NULL THEN
-      RETURN value_split[1]::NUMERIC * 100;
+      RETURN trim_scale(value_split[1]::NUMERIC * 100);
     ELSEIF value_split[2] = 'cm' THEN
-      RETURN value_split[1]::NUMERIC;
+      RETURN trim_scale(value_split[1]::NUMERIC);
     ELSE
       RAISE NOTICE 'Unknown length unit detected: "%".  Returning NULL.', value;
       RETURN NULL;
@@ -86,11 +86,11 @@ BEGIN
   BEGIN
     -- check, if the unit is 't', or has no unit defined
     IF value_split[2] = 't' OR value_split[2] IS NULL THEN
-      RETURN value_split[1]::NUMERIC * 1000;
+      RETURN trim_scale(value_split[1]::NUMERIC * 1000);
     ELSEIF value_split[2] = 'kg' THEN
-      RETURN value_split[1]::NUMERIC;
+      RETURN trim_scale(value_split[1]::NUMERIC);
     ELSEIF value_split[2] = 'g' THEN
-      RETURN value_split[1]::NUMERIC / 1000;
+      RETURN trim_scale(value_split[1]::NUMERIC / 1000);
     ELSE
       RAISE NOTICE 'Unknown weight unit detected: "%".  Returning NULL.', value;
       RETURN NULL;
@@ -122,9 +122,9 @@ BEGIN
   -- try casting/parsing to NUMERIC and catch in case of failure
   BEGIN
     IF unit = '%' THEN
-      RETURN LEFT(value, -1)::NUMERIC;
+      RETURN trim_scale(LEFT(value, -1)::NUMERIC);
     ELSEIF unit = '°' THEN
-      RETURN TAN(RADIANS(LEFT(value, -1)::NUMERIC)) * 100;
+      RETURN trim_scale(TAN(RADIANS(LEFT(value, -1)::NUMERIC)) * 100);
     ELSE
       RAISE NOTICE 'Unknown incline unit detected: "%".  Returning NULL.', value;
       RETURN NULL;
@@ -266,7 +266,12 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION create_keyList(keys xml) RETURNS xml AS
 $$
-SELECT xmlelement(name "keyList", $1);
+SELECT xmlelement(name "keyList", keys);
+-- Why not "create_keyList(VARIADIC keys xml[])"?
+-- not supported: SELECT xmlelement(name "keyList", xmlconcat(VARIADIC keys));
+-- see: https://www.postgresql.org/message-id/492153FB.8000502%40gmx.net
+-- and: SELECT xmlelement(name "keyList", xmlagg(a)) FROM unnest(keys) a;
+-- is little bit slower
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -409,7 +414,10 @@ SELECT create_keyList(xmlconcat(
         -- 2122: ramp length in centimeter
         create_KeyValue('2122', TRUNC(calculate_Distance(geo) * 100)),
         -- 2123: ramp width
-        create_KeyValue('2123', parse_length(tags->>'width')),
+        create_KeyValue('2123', parse_length(COALESCE(
+          tags->>'maxwidth:physical',
+          tags->>'width'
+        ))),
         -- 2124: ramp slope
         create_KeyValue('2124', parse_incline(tags->>'incline'))
       )
