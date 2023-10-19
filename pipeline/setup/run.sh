@@ -7,7 +7,7 @@ export RUN_IMPORT=""
 export RUN_PREPROCESSING=""
 export USE_PGADMIN4=""
 
-# Optionally get user input if the script is not run automatically: 
+# Optionally get user input if the script is not run automatically:
 if ! [ "$RUN_AUTOMATICALLY" = "true" ]; then
   # Import a new OSM file to be used for PPR and OSM2PGSQL
   read -p "Do you want to import an OSM file? (y/n) " RUN_IMPORT

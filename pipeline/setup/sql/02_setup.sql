@@ -1,8 +1,8 @@
 /*******************************************
  * Create tables to be used in later steps *
  *******************************************/
- 
-/* 
+
+/*
  * Create organisations table:
  * Table for the public transport operator list from Wikidata
  * This table will be filled in the "organisations" step of the pipeline.
@@ -21,7 +21,7 @@ CREATE TABLE organisations (
 );
 
 
-/* 
+/*
  * Create paths_elements_ref table:
  * Reference table for path links to osm elements. A path link is likely composed of multiple OSM elements.
  * Nodes, ways and areas are stored in separate arrays to be able to query them separately.
@@ -59,7 +59,7 @@ CREATE TABLE path_links (
 );
 
 
-/* 
+/*
  * Create category type:
  * Enum type named "category" to account for the different types of stop place elements.
  * Used in the "routing" and the "export" step of the pipeline.
@@ -68,7 +68,7 @@ CREATE TABLE path_links (
 CREATE TYPE category AS ENUM ('QUAY', 'ENTRANCE', 'PARKING', 'ACCESS_SPACE', 'SITE_PATH_LINK');
 
 
-/* 
+/*
  * Create access_spaces table:
  * Table for the access spaces that will be generated from the paths.
  * This table will be filled in the "routing" step of the pipeline.
