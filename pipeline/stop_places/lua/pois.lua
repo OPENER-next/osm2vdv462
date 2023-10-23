@@ -36,6 +36,11 @@ local extract_conditions = {
         ['barrier'] = {
             'cycle_barrier'
         }
+    },
+    {
+        ['indoor'] = {
+            'door'
+        }
     }
 }
 

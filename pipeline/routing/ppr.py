@@ -136,23 +136,29 @@ def requiresAccessSpace(currentEdge, previousEdge):
     # They always have the same level, regardless of the direction. So the access spaces are identified by the level of the previous edge when going into the stairs,
     # and the level of the current edge when going out of the stairs.
 
-    special_edge_types = ["elevator", "cycle_barrier"]
-    special_street_types = ["stairs", "escalator", "moving_walkway"]
-
     edge_type = currentEdge["edge_type"]
     previousEdge_type = previousEdge["edge_type"]
     street_type = currentEdge["street_type"]
     previous_street_type = previousEdge["street_type"]
 
-    if( # 1) transition from one edge_type to another
-        edge_type != previousEdge_type and
-        (edge_type in special_edge_types or previousEdge_type in special_edge_types)
-        )\
-        or( # 2) transition from one street_type to another
-            street_type != previous_street_type and
-            (street_type in special_street_types or previous_street_type in special_street_types)
-        ):
-        return True
+    # transition from one edge_type to another
+    if (edge_type != previousEdge_type):
+        if (edge_type == "elevator" or previousEdge_type == "elevator"): return True
+        if (edge_type == "cycle_barrier" or previousEdge_type == "cycle_barrier"): return True
+        if (edge_type == "entrance"):
+            door_type = currentEdge["door_type"]
+            if (door_type != "no" and door_type != None): return True
+        if (previousEdge_type == "entrance"):
+            door_type = previousEdge["door_type"]
+            if (door_type != "no" and door_type != None): return True
+    # transition from one street_type to another
+    if (street_type != previous_street_type):
+        if (street_type == "stairs" or previous_street_type == "stairs"): return True
+        if (street_type == "escalator" or previous_street_type == "escalator"): return True
+        if (street_type == "moving_walkway" or previous_street_type == "moving_walkway"): return True
+    # transition on ramps
+    if (currentEdge["incline"] != previousEdge["incline"]): return True
+
     return False
 
 

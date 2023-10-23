@@ -460,26 +460,52 @@ CREATE OR REPLACE FUNCTION ex_keyList_AccessSpace(tags jsonb, additionalPairs xm
 $$
 SELECT create_keyList(xmlconcat(
   additionalPairs,
-  -- 2080: bicycle barrier opening width
-  -- 2081: bicycle barrier spacing width
   (SELECT CASE
+    -- cycle barrier single
     WHEN tags->>'barrier' = 'cycle_barrier' AND tags->>'cycle_barrier' IN ('single', 'tilted', 'diagonal') THEN
+      -- 2080: bicycle barrier opening width
       xmlconcat(
         create_KeyValue('2080 ', parse_length(tags->>'maxwidth:physical'))
       )
+    -- cycle barrier single
     WHEN tags->>'barrier' = 'cycle_barrier' AND tags->>'cycle_barrier' IN ('double', 'triple') THEN
+      -- 2080: bicycle barrier opening width
+      -- 2081: bicycle barrier spacing width
       xmlconcat(
         create_KeyValue('2080 ', parse_length(tags->>'opening')),
         create_KeyValue('2081 ', parse_length(tags->>'spacing'))
       )
-  END),
-  -- 2091: door width of the elevator
-  -- just the entry (door) of the elevator is considered as an access space
-  create_KeyValue('2091',
-    (SELECT CASE
-      WHEN tags->>'door' IS NOT NULL THEN tags->>'width'
-    END)
-  )
+    -- doors
+    WHEN tags->>'indoor' = 'door' AND tags->>'door' <> 'no' THEN
+      xmlconcat(
+        -- 2030: entrance
+        create_KeyValue('2030', ''::text),
+        -- 2032: type of entrance:
+        create_KeyValue('2032',
+          (SELECT CASE
+            WHEN tags->>'door' = 'yes' THEN 'Tür'::text
+            WHEN tags->>'door' = 'hinged' THEN 'Anschlagtür'::text
+            WHEN tags->>'door' = 'sliding' THEN 'Schiebetür'::text
+            WHEN tags->>'door' = 'revolving' THEN 'Drehtür'::text
+            WHEN tags->>'door' = 'swinging' THEN 'Pendeltür'::text
+          END)
+        ),
+        -- 2033: type of door opening:
+        create_KeyValue('2033',
+          (SELECT CASE
+            WHEN tags->>'automatic_door' = 'yes' THEN 'automatisch'::text
+            WHEN tags->>'automatic_door' = 'button' THEN 'halbautomatisch'::text
+            WHEN tags->>'automatic_door' = 'motion' THEN 'automatisch'::text
+          END)
+        ),
+        -- 2034: door width
+        create_KeyValue('2034', parse_length(COALESCE(
+          tags->>'maxwidth:physical',
+          tags->>'width',
+          tags->>'door:width'
+        )))
+      )
+  END)
 ));
 $$
 LANGUAGE SQL IMMUTABLE;
