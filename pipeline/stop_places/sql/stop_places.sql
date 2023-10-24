@@ -673,7 +673,7 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * Create a Name element based on name, official_name, description tag
  * Returns null otherwise
  */
-CREATE OR REPLACE FUNCTION ex_Name(tags jsonb) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_Name(tags jsonb, fallback text DEFAULT NULL) RETURNS xml AS
 $$
 DECLARE
   result text;
@@ -685,7 +685,8 @@ BEGIN
     tags->>'uic_name',
     tags->>'ref',
     tags->>'ref:IFOPT:description',
-    tags->>'description'
+    tags->>'description',
+    fallback
   );
 
   IF result IS NOT NULL THEN
@@ -1166,7 +1167,7 @@ CREATE OR REPLACE VIEW final_entrances AS (
  * Create view that matches all access spaces to public transport areas
  */
 CREATE OR REPLACE VIEW final_access_spaces AS (
-  SELECT acc.*, pois.tags
+  SELECT acc.*, COALESCE(pois.tags, '{}'::jsonb) AS tags
   FROM access_spaces acc
   LEFT JOIN pois
     ON acc.node_id = pois.osm_id AND pois.osm_type = 'N'
@@ -1480,7 +1481,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <keyList>
             ex_keyList_AccessSpace(ex.tags),
             -- <Name>
-            ex_Name(ex.tags),
+            ex_Name(ex.tags, 'Zugang'),
             -- <Centroid>
             ex_Centroid(ex.geom),
             -- <LevelRef>
