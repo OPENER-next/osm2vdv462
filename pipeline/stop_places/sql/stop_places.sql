@@ -673,7 +673,7 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  * Create a Name element based on name, official_name, description tag
  * Returns null otherwise
  */
-CREATE OR REPLACE FUNCTION ex_Name(tags jsonb, fallback text DEFAULT NULL) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_Name(tags jsonb, fallback text DEFAULT '') RETURNS xml AS
 $$
 DECLARE
   result text;
@@ -686,7 +686,9 @@ BEGIN
     tags->>'ref',
     tags->>'ref:IFOPT:description',
     tags->>'description',
-    fallback
+    -- with STRICT the DEFAULT fallback value cannot be set to NULL
+    -- therefore we set it to an empty string and make it NULL here
+    NULLIF(fallback, '')
   );
 
   IF result IS NOT NULL THEN
@@ -936,7 +938,7 @@ BEGIN
     ELSEIF tags->>'highway' = 'steps' AND
           tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible')
       THEN result := 'escalator';
-    ELSEIF tags->>'highway' = 'footway' AND
+    ELSEIF tags->>'highway' IN ('footway', 'path', 'cycleway') AND
           tags->>'incline' IS NOT NULL
       THEN result := 'ramp';
     END IF;
