@@ -84,8 +84,8 @@ def insertAccessSpaces(cur, currentEdge, previousEdge, relation_id):
     edge_type = currentEdge["edge_type"]
     street_type = currentEdge["street_type"]
 
-    if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator":
-        # going into the elevator/stairs/escalator: use level from the previous edge
+    if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator" or currentEdge["incline"] != None:
+        # going into the elevator/stairs/escalator/ramp: use level from the previous edge
         # this might fail if two special cases are directly connected (e.g. escalator to stairs)
         current_level = previousEdge["level"]
     else:
