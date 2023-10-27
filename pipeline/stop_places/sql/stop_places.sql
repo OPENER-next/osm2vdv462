@@ -1435,12 +1435,30 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
       FROM jsonb_each_text(ex.levels)
     )),
     -- ORDER BY is important for NeTEx validity
-    -- Quays, AccessSpaces, Entrances & Parkings should come first while the SitePathLinks should be the last
+    -- Entrances, Quays, AccessSpaces, Parkings, SitePathLinks
     xmlagg(ex.xml_children ORDER BY ex.category ASC)
   )
   FROM (
     SELECT ex.category, ex.relation_id, ex.area_id, ex.area_tags, ex.area_geom, ex.operator_id, ex.network_id, ex.levels,
     CASE
+      -- <entrances>
+      WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
+        xmlagg(
+          -- <Entrance>
+          xmlelement(name "Entrance", xmlattributes(ex.id AS "id", 'any' AS "version"),
+            -- <keyList>
+            ex_keyList_Entrance(ex.tags),
+            -- <Name>
+            ex_Name(ex.tags),
+            -- <Centroid>
+            ex_Centroid(ex.geom),
+            -- <LevelRef>
+            ex_LevelRef(ex.relation_id, ex.level),
+            -- <EntranceType>
+            ex_EntranceType(ex.tags)
+          )
+        )
+      ))
       -- <quays>
       WHEN ex.category = 'QUAY' THEN xmlelement(name "quays", (
         xmlagg(
@@ -1458,24 +1476,6 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             ex_LevelRef(ex.relation_id, ex.level),
             -- <QuayType>
             ex_QuayType(ex.tags, ex.geom)
-          )
-        )
-      ))
-      -- <entrances>
-      WHEN ex.category = 'ENTRANCE' THEN xmlelement(name "entrances", (
-        xmlagg(
-          -- <Entrance>
-          xmlelement(name "Entrance", xmlattributes(ex.id AS "id", 'any' AS "version"),
-            -- <keyList>
-            ex_keyList_Entrance(ex.tags),
-            -- <Name>
-            ex_Name(ex.tags),
-            -- <Centroid>
-            ex_Centroid(ex.geom),
-            -- <LevelRef>
-            ex_LevelRef(ex.relation_id, ex.level),
-            -- <EntranceType>
-            ex_EntranceType(ex.tags)
           )
         )
       ))
