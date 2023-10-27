@@ -23,6 +23,14 @@ SELECT xmlroot(
           xmlelement(name "SiteFrame", xmlattributes('SiteFrame_1' AS "id", 'any' AS "version"),
             xmlelement(name "stopPlaces",
               ( SELECT xmlagg(xmlelement) FROM xml_stopPlaces )
+            ),
+            -- if element is empty remove it, to validate NeTEx
+            -- https://stackoverflow.com/questions/77374040
+            NULLIF(
+              xmlelement(name "parkings",
+                ( SELECT xmlagg(xmlelement) FROM xml_parkings )
+              )::text,
+              '<parkings/>'::text
             )
           ),
           xmlelement(name "ResourceFrame", xmlattributes('ResourceFrame_1' AS "id", 'any' AS "version"),

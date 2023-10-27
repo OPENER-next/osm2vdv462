@@ -822,64 +822,6 @@ LANGUAGE SQL IMMUTABLE;
 
 
 /*
- * Create a ParkingType element based on the tags: park_ride
- * Unused types: "liftShareParking" | "urbanParking" | "airportParking" | "trainStationParking" | "exhibitionCentreParking" |
- * "rentalCarParking" | "shoppingCentreParking" | "motorwayParking" | "roadside" | "parkingZone" | "cycleRental" | "other"
- * If no match is found this will always return a ParkingType of "undefined"
- */
-CREATE OR REPLACE FUNCTION ex_ParkingType(tags jsonb) RETURNS xml AS
-$$
-SELECT xmlelement(name "ParkingType",
-  CASE
-    WHEN $1->>'park_ride' IN ('yes', 'bus', 'ferry', 'metro', 'train', 'tram') THEN 'parkAndRide'
-    ELSE 'undefined'
-  END
-)
-$$
-LANGUAGE SQL IMMUTABLE;
-
-
-/*
- * Create a ParkingLayout element based on the tags: parking and covered
- * Unused types: "cycleHire"
- * If no match is found this will always return a ParkingLayout of "other"
- */
-CREATE OR REPLACE FUNCTION ex_ParkingLayout(tags jsonb) RETURNS xml AS
-$$
-SELECT xmlelement(name "ParkingLayout",
-  CASE
-    WHEN $1->>'parking' IS NULL THEN 'undefined'
-    WHEN $1->>'parking' = 'multi-storey' THEN 'multistorey '
-    WHEN $1->>'parking' = 'underground' THEN 'underground'
-    WHEN $1->>'parking' = 'street_side' THEN 'roadside'
-    WHEN $1->>'parking' = 'surface' AND $1->>'covered' = 'yes' THEN 'covered'
-    WHEN $1->>'parking' = 'surface' THEN 'openSpace'
-    ELSE 'other'
-  END
-)
-$$
-LANGUAGE SQL IMMUTABLE;
-
-
-/*
- * Create a TotalCapacity element based on capacity tag
- * Returns null otherwise
- */
-CREATE OR REPLACE FUNCTION ex_TotalCapacity(tags jsonb) RETURNS xml AS
-$$
-SELECT
-  CASE
-    WHEN $1->>'capacity' IS NOT NULL THEN xmlelement(
-      name "TotalCapacity",
-      $1->>'capacity'
-    )
-    ELSE NULL
-  END
-$$
-LANGUAGE SQL IMMUTABLE STRICT;
-
-
-/*
  * Create an AccessSpaceType element based on a variety of tags.
  * Returns null when no tag matching exists
  */
@@ -1176,21 +1118,6 @@ CREATE OR REPLACE VIEW final_access_spaces AS (
 );
 
 
-/************
- * PARKINGS *
- ************/
-
-/*
- * Create view that matches all parking spaces to public transport areas by the reference table.
- */
-CREATE OR REPLACE VIEW final_parkings AS (
-  SELECT ptr.relation_id, par.*, get_Level(par.tags) AS "level"
-  FROM parking par
-  JOIN stop_areas_members_ref ptr
-    ON par.osm_id = ptr.member_id AND par.osm_type = ptr.osm_type
-);
-
-
 /**************
  * PATH LINKS *
  **************/
@@ -1331,6 +1258,7 @@ CREATE OR REPLACE VIEW final_stop_places AS (
       stop_elements.tags->'level:ref'
     ) AS levels
   FROM (
+    -- Get Quays table
     SELECT
       relation_id, "level", tags
     FROM final_quays qua
@@ -1339,11 +1267,6 @@ CREATE OR REPLACE VIEW final_stop_places AS (
       SELECT
         relation_id, "level", tags
       FROM final_entrances ent
-    -- Append all Parking Spaces to the table
-    UNION ALL
-      SELECT
-        relation_id, "level", tags
-      FROM final_parkings par
     -- Append all AccessSpaces to the table
     UNION ALL
       SELECT
@@ -1384,12 +1307,6 @@ CREATE OR REPLACE VIEW export_data AS (
         'ACCESS_SPACE'::category AS category, relation_id,
         acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc."level" AS "level", NULL AS "from", NULL AS "to"
       FROM final_access_spaces acc
-    -- Append all Parking Spaces to the table
-    UNION ALL
-      SELECT
-        'PARKING'::category AS category, relation_id,
-        par."IFOPT" AS "id", par.tags AS tags, par.geom AS geom, par."level" AS "level", NULL AS "from", NULL AS "to"
-      FROM final_parkings par
     -- Append all Path Links to the table
     UNION ALL
       SELECT
@@ -1435,7 +1352,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
       FROM jsonb_each_text(ex.levels)
     )),
     -- ORDER BY is important for NeTEx validity
-    -- Entrances, Quays, AccessSpaces, Parkings, SitePathLinks
+    -- Entrances, Quays, AccessSpaces, SitePathLinks
     xmlagg(ex.xml_children ORDER BY ex.category ASC)
   )
   FROM (
@@ -1494,28 +1411,6 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             ex_LevelRef(ex.relation_id, ex.level),
             -- <AccessSpaceType>
             ex_AccessSpaceType(ex.tags)
-          )
-        )
-      ))
-      -- <parkings>
-      WHEN ex.category = 'PARKING' THEN xmlelement(name "parkings", (
-        xmlagg(
-          -- <Parking>
-          xmlelement(name "Parking", xmlattributes(ex.id AS "id", 'any' AS "version"),
-            -- <keyList>
-            ex_keyList_Parking(ex.tags),
-            -- <Name>
-            ex_Name(ex.tags),
-            -- <Centroid>
-            ex_Centroid(ex.geom),
-            -- <LevelRef>
-            ex_LevelRef(ex.relation_id, ex.level),
-            -- <ParkingType>
-            ex_ParkingType(ex.tags),
-            -- <ParkingLayout>
-            ex_ParkingLayout(ex.tags),
-            -- <TotalCapacity>
-            ex_TotalCapacity(ex.tags)
           )
         )
       ))

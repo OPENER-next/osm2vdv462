@@ -32,7 +32,6 @@ local parking_table = osm2pgsql.define_table({
         type_column = 'osm_type'
     },
     columns = {
-        { column = 'IFOPT', type = 'text', not_null = true },
         { column = 'tags', type = 'jsonb', not_null = true },
         { column = 'geom', type = 'geometry', not_null = true, projection = 4326 }
     }
