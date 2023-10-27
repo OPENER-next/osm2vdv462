@@ -3,9 +3,9 @@ Some useful tools and commands when working with or developing the export.
 
 - remove all containers, volumes etc. (basically reset docker compose) of the current docker compose project
   ```
-  docker compose down -v --rmi "local"
+  docker compose down --volumes --remove-orphans --rmi local
   ```
-  or `docker compose down -v --rmi "all"` to remove all images
+  or `docker compose down --volumes --remove-orphans --rmi all` to remove all images
 
 - convert .osm to .pbf using **osmium**
   ```
