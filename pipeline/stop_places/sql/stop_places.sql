@@ -1267,25 +1267,29 @@ CREATE OR REPLACE VIEW stop_places_with_organisations AS (
   FROM stop_areas
   LEFT JOIN organisations op
   ON
-    tags->>'operator:wikidata' = op.id OR
+    op.id = ANY(string_to_array(tags->>'operator:wikidata', ';')) OR
     -- ensure that if an wikidata id is present it will not be matched by name
     tags->>'operator:wikidata' IS NULL AND (
-      tags->>'operator' = op.label OR
-      tags->>'operator' = official_name OR
-      tags->>'operator' = ANY (string_to_array(op.alternatives, ', ')) OR
-      tags->>'operator:short' = op.short_name OR
-      tags->>'operator:short' = ANY (string_to_array(op.alternatives, ', '))
+      (
+        string_to_array(tags->>'operator', ';') ||
+        string_to_array(tags->>'operator:short', ';')
+      ) && ( -- checks if the arrays have at least one element in common
+        ARRAY[ op.label, op.official_name, op.short_name ] ||
+        string_to_array(op.alternatives, ', ')
+      )
     )
   LEFT JOIN organisations net
   ON
-    tags->>'network:wikidata' = net.id OR
+    net.id = ANY(string_to_array(tags->>'network:wikidata', ';')) OR
     -- ensure that if an wikidata id is present it will not be matched by name
     tags->>'network:wikidata' IS NULL AND (
-      tags->>'network' = net.label OR
-      tags->>'network' = net.official_name OR
-      tags->>'network' = ANY (string_to_array(net.alternatives, ', ')) OR
-      tags->>'network:short' = net.short_name OR
-      tags->>'network:short' = ANY (string_to_array(net.alternatives, ', '))
+      (
+        string_to_array(tags->>'network', ';') ||
+        string_to_array(tags->>'network:short', ';')
+      ) && ( -- checks if the arrays have at least one element in common
+        ARRAY[ net.label, net.official_name, net.short_name ] ||
+        string_to_array(net.alternatives, ', ')
+      )
     )
 );
 
