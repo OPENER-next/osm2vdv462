@@ -972,6 +972,61 @@ CREATE OR REPLACE AGGREGATE jsonb_combine(jsonb)
  * QUAYS *
  *********/
 
+/*
+ * This view sub divides the polygon into simple sub-polygons (ST_Subdivide)
+ * Wraps rectangles around each sub-polygon (ST_OrientedEnvelope)
+ * Takes the rectangle with the longest side - assuming the side is to the road/track (ST_DumpSegments + MAX length)
+ * Return the shorter side (width) from the selected rectangle (MIN width)
+ * Inspired by https://gis.stackexchange.com/a/364502
+ * NOTE: This is implemented as a view, because it turned out to be way slower as an individual function call
+ * Other ideas:
+ * How to find the maximum-area-rectangle inside a convex polygon?
+ * https://gis.stackexchange.com/questions/59215/how-to-find-the-maximum-area-rectangle-inside-a-convex-polygon
+ * Calculating average width of polygon?
+ * https://gis.stackexchange.com/questions/20279/calculating-average-width-of-polygon
+ * Width could also be calculated by using ST_MaximumInscribedCircle. However this would return the largest width and not the "average"
+ * https://postgis.net/docs/ST_MaximumInscribedCircle.html
+*/
+CREATE OR REPLACE VIEW platforms_with_width AS (
+  SELECT
+    osm_id, osm_type, "IFOPT", q.geom,
+    CASE
+      -- only write "est_width" for polygons
+      WHEN ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
+        jsonb_set(q.tags, '{est_width}', to_jsonb(width))
+      ELSE
+        q.tags
+    END
+  FROM (
+    SELECT DISTINCT ON (osm_id, osm_type)
+      q.*,
+      -- smaller sub-envelope side
+      MIN(calculate_Distance(s.geom)) width,
+      -- larger sub-envelope side
+      MAX(calculate_Distance(s.geom)) length
+    FROM (
+      SELECT
+        platforms.*,
+        ST_OrientedEnvelope(
+          ST_Subdivide(
+            -- remove obsolete points to improve subdivide
+            ST_SimplifyPreserveTopology(geom, 0.000001), 5
+          )
+        ) AS envelope_geom
+      FROM platforms
+    ) q
+    -- split envelopes into individual line segments to measure their length
+    -- use left join so source rows will appear in the result even if the LATERAL subquery produces no rows for them
+    LEFT JOIN LATERAL ST_DumpSegments(envelope_geom) s ON true
+    -- group by envelope geom to get envelope width and length
+    GROUP BY osm_id, osm_type, "IFOPT", q.geom, tags, envelope_geom
+    -- DISTINCT will only take the first row, therefore sort it by length
+    -- so the row with the longest side is used
+    ORDER BY osm_id, osm_type, length DESC
+  ) q
+);
+
+
 /* Create view that splits all platforms that have multiple IFOPTs into multiple platforms.
  * Ways that touch a platform and have the corresponding ref tag are added to the platform edges.
  * This is done by using the ST_Touches function.
@@ -994,9 +1049,9 @@ CREATE OR REPLACE VIEW platforms_split AS (
     -- 'split_ref' will be NULL if thre is no ref tag
     SELECT
       *,
-      string_to_table(platforms."IFOPT", ';') AS "split_IFOPT",
-      string_to_table(platforms.tags->>'ref', ';') AS "split_ref"
-    FROM platforms
+      string_to_table(pww."IFOPT", ';') AS "split_IFOPT",
+      string_to_table(pww.tags->>'ref', ';') AS "split_ref"
+    FROM platforms_with_width AS pww
   ) ps
   -- Join platform edges if any to the platforms to refine tags and geometry
   LEFT JOIN platforms_edges pe
@@ -1037,66 +1092,11 @@ CREATE OR REPLACE VIEW platforms_merged AS (
 
 
 /*
- * This view sub divides the polygon into simple sub-polygons (ST_Subdivide)
- * Wraps rectangles around each sub-polygon (ST_OrientedEnvelope)
- * Takes the rectangle with the longest side - assuming the side is to the road/track (ST_DumpSegments + MAX length)
- * Return the shorter side (width) from the selected rectangle (MIN width)
- * Inspired by https://gis.stackexchange.com/a/364502
- * NOTE: This is implemented as a view, because it turned out to be way slower as an individual function call
- * Other ideas:
- * How to find the maximum-area-rectangle inside a convex polygon?
- * https://gis.stackexchange.com/questions/59215/how-to-find-the-maximum-area-rectangle-inside-a-convex-polygon
- * Calculating average width of polygon?
- * https://gis.stackexchange.com/questions/20279/calculating-average-width-of-polygon
- * Width could also be calculated by using ST_MaximumInscribedCircle. However this would return the largest width and not the "average"
- * https://postgis.net/docs/ST_MaximumInscribedCircle.html
-*/
-CREATE OR REPLACE VIEW platforms_with_width AS (
-  SELECT
-    osm_id, osm_type, "IFOPT", q.geom,
-    CASE
-      -- only write "est_width" for polygons
-      WHEN ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
-        jsonb_set(q.tags, '{est_width}', to_jsonb(width))
-      ELSE
-        q.tags
-    END
-  FROM (
-    SELECT DISTINCT ON (osm_id, osm_type)
-      q.*,
-      -- smaller sub-envelope side
-      MIN(calculate_Distance(s.geom)) width,
-      -- larger sub-envelope side
-      MAX(calculate_Distance(s.geom)) length
-    FROM (
-      SELECT
-        platforms_merged.*,
-        ST_OrientedEnvelope(
-          ST_Subdivide(
-            -- remove obsolete points to improve subdivide
-            ST_SimplifyPreserveTopology(geom, 0.000001), 5
-          )
-        ) AS envelope_geom
-      FROM platforms_merged
-    ) q
-    -- split envelopes into individual line segments to measure their length
-    -- use left join so source rows will appear in the result even if the LATERAL subquery produces no rows for them
-    LEFT JOIN LATERAL ST_DumpSegments(envelope_geom) s ON true
-    -- group by envelope geom to get envelope width and length
-    GROUP BY osm_id, osm_type, "IFOPT", q.geom, tags, envelope_geom
-    -- DISTINCT will only take the first row, therefore sort it by length
-    -- so the row with the longest side is used
-    ORDER BY osm_id, osm_type, length DESC
-  ) q
-);
-
-
-/*
  * Create view that matches all platforms/quays to public transport areas by the reference table.
  */
 CREATE OR REPLACE VIEW final_quays AS (
   SELECT ptr.relation_id, pts.*, get_Level(pts.tags) AS "level"
-  FROM platforms_with_width pts
+  FROM platforms_merged pts
   JOIN stop_areas_members_ref ptr
     ON pts.osm_id = ptr.member_id AND pts.osm_type = ptr.osm_type
 );
