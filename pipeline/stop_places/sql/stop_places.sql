@@ -215,20 +215,26 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Creates the From and To element based on given ids
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_FromTo(edge EDGE_DESCRIPTION) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_FromTo(area_id TEXT, edge EDGE_DESCRIPTION) RETURNS xml AS
 $$
 SELECT xmlconcat(
   xmlelement(name "From",
     (SELECT CASE
       WHEN edge.fromType = 'ENTRANCE'::category
-      THEN xmlelement(name "EntranceRef", xmlattributes(edge.fromIFOPT AS "ref", 'any' AS "version"))
+      THEN xmlconcat(
+        xmlelement(name "PlaceRef", xmlattributes(area_id AS "ref", 'any' AS "version")),
+        xmlelement(name "EntranceRef", xmlattributes(edge.fromIFOPT AS "ref", 'any' AS "version"))
+      )
       ELSE xmlelement(name "PlaceRef", xmlattributes(edge.fromIFOPT AS "ref", 'any' AS "version"))
     END)
   ),
   xmlelement(name "To",
     (SELECT CASE
       WHEN edge.toType = 'ENTRANCE'::category
-      THEN xmlelement(name "EntranceRef", xmlattributes(edge.toIFOPT AS "ref", 'any' AS "version"))
+      THEN xmlconcat(
+        xmlelement(name "PlaceRef", xmlattributes(area_id AS "ref", 'any' AS "version")),
+        xmlelement(name "EntranceRef", xmlattributes(edge.toIFOPT AS "ref", 'any' AS "version"))
+      )
       ELSE xmlelement(name "PlaceRef", xmlattributes(edge.toIFOPT AS "ref", 'any' AS "version"))
     END)
   )
@@ -1433,7 +1439,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <LineString>
             ex_LineString(ex.geom, ex.id),
             -- <From> <To>
-            ex_FromTo(ex.edge),
+            ex_FromTo(ex.area_id, ex.edge),
             -- <NumberOfSteps>
             ex_NumberOfSteps(ex.tags),
             -- <AccessFeatureType>
