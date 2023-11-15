@@ -215,14 +215,22 @@ LANGUAGE SQL IMMUTABLE STRICT;
  * Creates the From and To element based on given ids
  * Returns null when any argument is null
  */
-CREATE OR REPLACE FUNCTION ex_FromTo(a text, b text) RETURNS xml AS
+CREATE OR REPLACE FUNCTION ex_FromTo(edge EDGE_DESCRIPTION) RETURNS xml AS
 $$
 SELECT xmlconcat(
   xmlelement(name "From",
-    xmlelement(name "PlaceRef", xmlattributes($1 AS "ref", 'any' AS "version"))
+    (SELECT CASE
+      WHEN edge.fromType = 'ENTRANCE'::category
+      THEN xmlelement(name "EntranceRef", xmlattributes(edge.fromIFOPT AS "ref", 'any' AS "version"))
+      ELSE xmlelement(name "PlaceRef", xmlattributes(edge.fromIFOPT AS "ref", 'any' AS "version"))
+    END)
   ),
   xmlelement(name "To",
-    xmlelement(name "PlaceRef", xmlattributes($2 AS "ref", 'any' AS "version"))
+    (SELECT CASE
+      WHEN edge.toType = 'ENTRANCE'::category
+      THEN xmlelement(name "EntranceRef", xmlattributes(edge.toIFOPT AS "ref", 'any' AS "version"))
+      ELSE xmlelement(name "PlaceRef", xmlattributes(edge.toIFOPT AS "ref", 'any' AS "version"))
+    END)
   )
 )
 $$
@@ -1137,20 +1145,20 @@ CREATE OR REPLACE VIEW final_access_spaces AS (
 CREATE OR REPLACE VIEW stop_area_edges AS (
   -- permutation of all quays per relation (same as CROSS JOIN with WHERE)
   -- will include both directions since it is a self join
-  SELECT q1.relation_id, q1."IFOPT" AS "start_IFOPT", q2."IFOPT" AS "end_IFOPT", ST_Centroid(q1.geom) AS start_geom, ST_Centroid(q2.geom) AS end_geom
+  SELECT q1.relation_id, q1."IFOPT" AS "start_IFOPT", q2."IFOPT" AS "end_IFOPT", ST_Centroid(q1.geom) AS start_geom, ST_Centroid(q2.geom) AS end_geom, 'QUAY'::category AS start_type, 'QUAY'::category AS end_type
   FROM final_quays AS q1
   INNER JOIN final_quays AS q2
   ON q1.relation_id = q2.relation_id AND q1 != q2
   UNION ALL
   -- permutation of all entrances and quays per relation
   -- first direction
-  SELECT q.relation_id, q."IFOPT" AS "start_IFOPT", e."IFOPT" AS "end_IFOPT", ST_Centroid(q.geom) AS start_geom, ST_Centroid(e.geom) AS end_geom
+  SELECT q.relation_id, q."IFOPT" AS "start_IFOPT", e."IFOPT" AS "end_IFOPT", ST_Centroid(q.geom) AS start_geom, ST_Centroid(e.geom) AS end_geom, 'QUAY'::category AS start_type, 'ENTRANCE'::category AS end_type
   FROM final_quays AS q
   INNER JOIN final_entrances AS e
   ON e.relation_id = q.relation_id
   UNION ALL
   -- reverse direction
-  SELECT q.relation_id, e."IFOPT" AS "start_IFOPT", q."IFOPT" AS "end_IFOPT", ST_Centroid(e.geom) AS start_geom, ST_Centroid(q.geom) AS end_geom
+  SELECT q.relation_id, e."IFOPT" AS "start_IFOPT", q."IFOPT" AS "end_IFOPT", ST_Centroid(e.geom) AS start_geom, ST_Centroid(q.geom) AS end_geom, 'ENTRANCE'::category AS start_type, 'QUAY'::category AS end_type
   FROM final_quays AS q
   INNER JOIN final_entrances AS e
   ON e.relation_id = q.relation_id
@@ -1168,7 +1176,7 @@ CREATE OR REPLACE VIEW final_site_path_links AS (
   -- use distinct to filter any duplicated joined paths
   SELECT DISTINCT ON (pl.path_id)
     -- fallback to empty tags if no matching element exists
-    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(hw.tags, '{}'::jsonb) as tags, pl.geom, pl.level, start_node_id as "from", end_node_id as "to"
+    stop_area_relation_id AS relation_id, pl.path_id::text as id, COALESCE(hw.tags, '{}'::jsonb) as tags, pl.geom, pl.level, edge
   FROM path_links pl
   LEFT JOIN (
     SELECT DISTINCT per.path_id, jsonb_combine(highways.tags) as tags
@@ -1293,25 +1301,25 @@ CREATE OR REPLACE VIEW export_data AS (
   FROM (
     SELECT
       'QUAY'::category AS category, relation_id,
-      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, qua."level" AS "level", NULL AS "from", NULL AS "to"
+      qua."IFOPT" AS "id", qua.tags AS tags, qua.geom AS geom, qua."level" AS "level", NULL::EDGE_DESCRIPTION AS "edge"
     FROM final_quays qua
     -- Append all Entrances to the table
     UNION ALL
       SELECT
         'ENTRANCE'::category AS category, relation_id,
-        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, ent."level" AS "level", NULL AS "from", NULL AS "to"
+        ent."IFOPT" AS "id", ent.tags AS tags, ent.geom AS geom, ent."level" AS "level", NULL::EDGE_DESCRIPTION AS "edge"
       FROM final_entrances ent
     -- Append all AccessSpaces to the table
     UNION ALL
       SELECT
         'ACCESS_SPACE'::category AS category, relation_id,
-        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc."level" AS "level", NULL AS "from", NULL AS "to"
+        acc."IFOPT" AS "id", acc.tags AS tags, acc.geom AS geom, acc."level" AS "level", NULL::EDGE_DESCRIPTION AS "edge"
       FROM final_access_spaces acc
     -- Append all Path Links to the table
     UNION ALL
       SELECT
         'SITE_PATH_LINK'::category AS category, relation_id,
-        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat."level" AS "level", pat.from AS "from", pat.to AS "to"
+        pat.id AS "id", pat.tags AS tags, pat.geom AS geom, pat."level" AS "level", pat.edge AS "edge"
       FROM final_site_path_links pat
   ) stop_elements
   INNER JOIN final_stop_places pta
@@ -1425,7 +1433,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <LineString>
             ex_LineString(ex.geom, ex.id),
             -- <From> <To>
-            ex_FromTo(ex.from, ex.to),
+            ex_FromTo(ex.edge),
             -- <NumberOfSteps>
             ex_NumberOfSteps(ex.tags),
             -- <AccessFeatureType>

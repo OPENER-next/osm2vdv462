@@ -36,6 +36,26 @@ CREATE TABLE paths_elements_ref (
 );
 
 
+/*
+ * Create category type:
+ * Enum type named "category" to account for the different types of stop place elements.
+ * Used in the "routing" and the "export" step of the pipeline.
+ * The order is important as it is used to sort/order the different categories later in the export.
+ */
+CREATE TYPE CATEGORY AS ENUM ('ENTRANCE', 'QUAY', 'ACCESS_SPACE', 'SITE_PATH_LINK');
+
+
+/*
+ * A composite type that holds from and to information about an edge / path link.
+ */
+CREATE TYPE EDGE_DESCRIPTION AS (
+  fromIFOPT text,
+  toIFOPT text,
+  fromType CATEGORY,
+  toType CATEGORY
+);
+
+
 /* Create path_links table:
  * Table for the elemental path links between nodes.
  * Nodes can be stop_area_elements (IFOPT from OSM) and access_spaces (IFOPT generated in the "routing" step).
@@ -48,24 +68,14 @@ CREATE TABLE paths_elements_ref (
 CREATE TABLE path_links (
   path_id SERIAL PRIMARY KEY,
   stop_area_relation_id INT,
-  start_node_id TEXT,
-  end_node_id TEXT,
+  edge EDGE_DESCRIPTION,
   level NUMERIC, -- positive for upwards link, negative for downwards link
   geom GEOMETRY,
   -- constraint used to filter potential duplicated path links
   -- include geom column because in rare cases the start & end node can be identical for different path links
   -- e.g. when stairs and escelators start and end at the same nodes.
-  CONSTRAINT check_unique_2 UNIQUE (start_node_id, end_node_id, geom)
+  CONSTRAINT check_unique_2 UNIQUE (edge, geom)
 );
-
-
-/*
- * Create category type:
- * Enum type named "category" to account for the different types of stop place elements.
- * Used in the "routing" and the "export" step of the pipeline.
- * The order is important as it is used to sort/order the different categories later in the export.
- */
-CREATE TYPE category AS ENUM ('ENTRANCE', 'QUAY', 'ACCESS_SPACE', 'SITE_PATH_LINK');
 
 
 /*

@@ -4,6 +4,18 @@ import requests
 import json
 import os
 
+
+# Describes a node (e.g. a Quay or Entrance) from the edges table
+class MainNode:
+  def __init__(self, relation_id, IFOPT, lat, lng, type):
+    self.relation_id = relation_id
+    self.IFOPT = IFOPT
+    self.lat = lat
+    self.lng = lng
+    self.type = type
+
+
+
 def truncateTables(conn, cur):
     cur.execute('TRUNCATE TABLE paths_elements_ref')
     cur.execute('TRUNCATE TABLE path_links')
@@ -62,15 +74,19 @@ def insertPathsElementsRef(cur, pathId, edges):
                 insertPathsElementsRefSQL(cur, pathId, 'N', edge["to_node_osm_id"])
 
 
-def insertPathLink(cur, relation_id, pathLink, id_from, id_to, level):
+def insertPathLink(cur, relation_id, pathLink, from_id, to_id, from_type, to_type, level):
     edgeList = [f"{edge[0]} {edge[1]}" for edge in pathLink]
     linestring = "LINESTRING(" + ",".join(edgeList) + ")"
 
     # use 'INSERT INTO ... ON CONFLICT DO NOTHING' to avoid duplicate entries
     # 'RETURNING path_id' returns the generated path_id
     cur.execute(
-        'INSERT INTO path_links (stop_area_relation_id, start_node_id, end_node_id, geom, level) VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326), %s) ON CONFLICT DO NOTHING RETURNING path_id',
-        (relation_id, id_from, id_to, linestring, level)
+        '''
+        INSERT INTO path_links (stop_area_relation_id, edge, geom, level)
+        VALUES (%s, (%s, %s, %s, %s), ST_GeomFromText(%s, 4326), %s)
+        ON CONFLICT DO NOTHING RETURNING path_id
+        ''',
+        (relation_id, from_id, to_id, from_type, to_type, linestring, level)
     )
 
     path_id = cur.fetchone()
@@ -94,19 +110,19 @@ def insertAccessSpaces(cur, currentEdge, previousEdge, relation_id):
 
     # create unique id for the access space, that will be filled into the 'IFOPT' column
     # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
-    newDHID = str(relation_id) + "_" + str(currentEdge["from_node_osm_id"]) + ":" + (str(current_level) if current_level != None else "")
+    newIFOPT = str(relation_id) + "_" + str(currentEdge["from_node_osm_id"]) + ":" + (str(current_level) if current_level != None else "")
     geomString = "POINT(" + str(currentEdge["path"][0][0]) + " " + str(currentEdge["path"][0][1]) + ")"
 
     try:
         # use INSERT INTO ... ON CONFLICT DO NOTHING to avoid duplicate entries
         cur.execute(
             'INSERT INTO access_spaces (node_id, relation_id, "level", "IFOPT", geom) VALUES (%s, %s, trim_scale(%s), %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING',
-            (currentEdge["from_node_osm_id"], relation_id, current_level, newDHID, geomString)
+            (currentEdge["from_node_osm_id"], relation_id, current_level, newIFOPT, geomString)
         )
     except Exception as e:
         exit(e)
 
-    return newDHID, current_level
+    return newIFOPT, current_level
 
 
 def requiresAccessSpace(currentEdge, previousEdge):
@@ -162,11 +178,15 @@ def requiresAccessSpace(currentEdge, previousEdge):
     return False
 
 
-def createPathNetwork(cur, edges, relation_id, dhid_from, dhid_to):
+def createPathNetwork(cur, edges, fromNode, toNode):
+    relation_id = fromNode.relation_id
     edgeIter = iter(edges)
     firstEdge = next(edgeIter)
+
     previousEdge = firstEdge
-    previousDHID = dhid_from
+    previousIFOPT = fromNode.IFOPT
+    previousType = fromNode.type
+
     fromLevel = firstEdge["level"]
     toLevel = firstEdge["level"]
 
@@ -178,13 +198,15 @@ def createPathNetwork(cur, edges, relation_id, dhid_from, dhid_to):
 
     for edge in edgeIter:
         if requiresAccessSpace(previousEdge, edge): # checks whether the given parameters need the creation of an access space
-            newDHID, toLevel = insertAccessSpaces(cur, edge, previousEdge, relation_id) # returns a newly created DHID for the access space and the level of the access space
-            pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, newDHID, toLevel - fromLevel)
+            newIFOPT, toLevel = insertAccessSpaces(cur, edge, previousEdge, relation_id) # returns a newly created IFOPT for the access space and the level of the access space
+            newType = "ACCESS_SPACE"
+            pathId = insertPathLink(cur, relation_id, pathLink, previousIFOPT, newIFOPT, previousType, newType, toLevel - fromLevel)
             if pathId:
                 insertPathsElementsRef(cur, pathId, pathLinkEdges)
             pathLink = edge["path"] # create a new pathLink consisting of the current edge
             pathLinkEdges = [edge]
-            previousDHID = newDHID
+            previousIFOPT = newIFOPT
+            previousType = newType
             fromLevel = toLevel
         else:
             # append all but the first node of the edge, because the first node is the same as the last node of the previous edge
@@ -195,28 +217,25 @@ def createPathNetwork(cur, edges, relation_id, dhid_from, dhid_to):
 
         previousEdge = edge
 
-    # the last part of the path is not inserted yet (between the last access space and the stop_area_element 'dhid_to')
-    pathId = insertPathLink(cur, relation_id, pathLink, previousDHID, dhid_to, toLevel - fromLevel)
+    # the last part of the path is not inserted yet (between the last access space and the stop_area_element)
+    pathId = insertPathLink(cur, relation_id, pathLink, previousIFOPT, toNode.IFOPT, previousType, toNode.type, toLevel - fromLevel)
 
     if pathId:
         insertPathsElementsRef(cur, pathId, pathLinkEdges)
 
 
-def insertPGSQL(cur, insertRoutes, start, stop):
+def insertPGSQL(cur, insertRoutes, fromNode, toNode):
     # PPR can return multiple possible paths for one connection:
     for route in insertRoutes:
         edges = route["edges"]
-        # distance = route["distance"]
-        relation_id = stop["relation_id"]
-
-        createPathNetwork(cur, edges, relation_id, start["IFOPT"], stop["IFOPT"])
+        createPathNetwork(cur, edges, fromNode, toNode)
 
 
-def makeRequest(url, payload, start, stop):
-    payload["start"]["lat"] = start["lat"]
-    payload["start"]["lng"] = start["lng"]
-    payload["destination"]["lat"] = stop["lat"]
-    payload["destination"]["lng"] = stop["lng"]
+def makeRequest(url, payload, fromNode, toNode):
+    payload["start"]["lat"] = fromNode.lat
+    payload["start"]["lng"] = fromNode.lng
+    payload["destination"]["lat"] = toNode.lat
+    payload["destination"]["lng"] = toNode.lng
 
     try:
         response = requests.post(url, json=payload)
@@ -273,8 +292,8 @@ def main():
         # SRID in POSTGIS is default set to 4326 --> x = lng, Y = lat
         cur.execute('''
             SELECT relation_id,
-            "start_IFOPT", ST_X(start_geom) as start_lng, ST_Y(start_geom) as start_lat,
-            "end_IFOPT", ST_X(end_geom) as end_lng, ST_Y(end_geom) as end_lat
+            "start_IFOPT", ST_X(start_geom) as start_lng, ST_Y(start_geom) as start_lat, start_type,
+            "end_IFOPT", ST_X(end_geom) as end_lng, ST_Y(end_geom) as end_lat, end_type
             FROM stop_area_edges
         ''')
         stop_area_edges = result = cur.fetchall()
@@ -284,21 +303,24 @@ def main():
         exit(e)
 
     for edge in stop_area_edges:
-        edge_start = {
-            "relation_id": edge["relation_id"],
-            "IFOPT": edge["start_IFOPT"],
-            "lat": edge["start_lat"],
-            "lng": edge["start_lng"]
-        }
-        edge_end = {
-            "relation_id": edge["relation_id"],
-            "IFOPT": edge["end_IFOPT"],
-            "lat": edge["end_lat"],
-            "lng": edge["end_lng"]
-        }
+        fromNode = MainNode(
+            edge["relation_id"],
+            edge["start_IFOPT"],
+            edge["start_lat"],
+            edge["start_lng"],
+            edge["start_type"]
+        )
 
-        json_data = makeRequest(url,payload,edge_start,edge_end)
-        insertPGSQL(cur,json_data["routes"],edge_start,edge_end)
+        toNode = MainNode(
+            edge["relation_id"],
+            edge["end_IFOPT"],
+            edge["end_lat"],
+            edge["end_lng"],
+            edge["end_type"]
+        )
+
+        json_data = makeRequest(url, payload, fromNode, toNode)
+        insertPGSQL(cur, json_data["routes"], fromNode, toNode)
 
         conn.commit()
 
