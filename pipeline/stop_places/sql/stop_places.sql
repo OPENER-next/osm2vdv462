@@ -769,6 +769,20 @@ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
+ * Create a OperatorRef element based on the given id.
+ * Returns null if no id is provided
+ */
+CREATE OR REPLACE FUNCTION ex_OperatorRef(id text) RETURNS xml AS
+$$
+  SELECT xmlelement(
+    name "OperatorRef",
+    xmlattributes($1 AS "ref", 'any' AS "version")
+  );
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+
+/*
  * Get the numeric level from given tags.
  * Returns 0 if no level could be parsed.
  */
@@ -1351,8 +1365,13 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
     ex_Description(ex.area_tags),
     -- <Centroid>
     ex_Centroid(area_geom),
-    -- <AuthorityRef>
-    ex_AuthorityRef(ex.network_id),
+    -- only one Ref is NeTEx valid
+    COALESCE(
+      -- <OperatorRef>
+      ex_OperatorRef(ex.operator_id),
+      -- <AuthorityRef>
+      ex_AuthorityRef(ex.network_id)
+    ),
     -- <levels>
     xmlelement(name "levels", (
       SELECT xmlagg(
