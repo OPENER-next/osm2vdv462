@@ -1007,7 +1007,7 @@ CREATE OR REPLACE VIEW platforms_with_width AS (
     CASE
       -- only write "est_width" for polygons
       WHEN ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
-        jsonb_set(q.tags, '{est_width}', to_jsonb(width))
+        jsonb_set(q.tags, '{est_width}', to_jsonb(ROUND(width::NUMERIC, 2)))
       ELSE
         q.tags
     END
