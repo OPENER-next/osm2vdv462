@@ -23,6 +23,12 @@ WHERE {
     ?item wdt:P31 wd:Q740752. # transport company
     BIND("operator" AS ?type)
   }
+  UNION
+  {
+    ?item wdt:P17 wd:Q183. # lies in Germany
+    ?item wdt:P31 wd:Q521458. # railway infrastructure manager
+    BIND("operator" AS ?type)
+  }
 
   OPTIONAL { ?item wdt:P1448 ?officialName. }
   OPTIONAL { ?item wdt:P1813 ?shortName. }
