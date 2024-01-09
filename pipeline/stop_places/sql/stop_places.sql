@@ -1399,7 +1399,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <keyList>
             ex_keyList_Entrance(ex.tags),
             -- <Name>
-            ex_Name(ex.tags),
+            ex_Name(ex.tags, 'Eingang'),
             -- <Centroid>
             ex_Centroid(ex.geom),
             -- <LevelRef>
@@ -1437,7 +1437,7 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
             -- <keyList>
             ex_keyList_AccessSpace(ex.tags),
             -- <Name>
-            ex_Name(ex.tags, 'Zugang'),
+            ex_Name(ex.tags, 'Zwischenpunkt'),
             -- <Centroid>
             ex_Centroid(ex.geom),
             -- <LevelRef>
