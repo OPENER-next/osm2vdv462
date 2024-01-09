@@ -601,7 +601,8 @@ BEGIN
     END IF;
   ELSEIF tags->>'coach' = 'yes'
     THEN result := 'coachStop';
-  ELSEIF tags->>'bus' = 'yes'
+  ELSEIF tags->>'bus' = 'yes' OR
+         tags->>'highway' = 'bus_stop'
     THEN result := 'busStop';
   ELSEIF tags->>'light_rail' = 'yes' OR
          tags->>'monorail' = 'yes' OR
