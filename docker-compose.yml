@@ -40,7 +40,7 @@ services:
       retries: 5
 
   osm2vdv462_ppr_preprocess:
-    image: ghcr.io/motis-project/ppr:pr-54
+    image: ghcr.io/motis-project/ppr:pr-57
     volumes:
       - "ppr:/data"
       # a placeholder path must be set when "IMPORT_FILE_PATH" is empty, otherwise there will be an error decoding the compose project
@@ -54,7 +54,7 @@ services:
     user: root
 
   osm2vdv462_ppr_backend:
-    image: ghcr.io/motis-project/ppr:pr-54
+    image: ghcr.io/motis-project/ppr:pr-57
     ports:
       - "9042:8000"
     volumes:
