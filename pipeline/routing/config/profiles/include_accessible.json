@@ -6,6 +6,11 @@
     "max_crossing_detour_tertiary": 200,
     "max_crossing_detour_residential": 100,
     "max_crossing_detour_service": 0,
+    "min_required_width": 0,
+    "min_allowed_incline": -127,
+    "max_allowed_incline": 127,
+    "wheelchair": false,
+    "stroller": false,
     "round_distance": 0,
     "round_duration": 30,
     "round_accessibility": 5,
@@ -15,24 +20,63 @@
     "crossing_primary": {
         "signals": {
             "duration": [
-                120
+                120,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "blind_signals": {
+            "duration": [
+                120,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "marked": {
             "duration": [
-                100
+                100,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "island": {
             "duration": [
-                200
+                200,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "unmarked": {
             "duration": [
@@ -47,24 +91,63 @@
     "crossing_secondary": {
         "signals": {
             "duration": [
-                60
+                60,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "blind_signals": {
+            "duration": [
+                60,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "marked": {
             "duration": [
-                30
+                30,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "island": {
             "duration": [
-                60
+                60,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "unmarked": {
             "duration": [
@@ -79,24 +162,63 @@
     "crossing_tertiary": {
         "signals": {
             "duration": [
-                60
+                60,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "blind_signals": {
+            "duration": [
+                60,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "marked": {
             "duration": [
-                30
+                30,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "island": {
             "duration": [
-                60
+                60,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "unmarked": {
             "duration": [
@@ -111,53 +233,155 @@
     "crossing_residential": {
         "signals": {
             "duration": [
-                45
+                45,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "blind_signals": {
+            "duration": [
+                45,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "marked": {
             "duration": [
-                20
+                20,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "island": {
             "duration": [
-                40
+                40,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "unmarked": {
             "duration": [
-                30
+                30,
+                0,
+                0
             ],
-            "accessibility": [],
-            "allowed": "allowed"
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         }
     },
     "crossing_service": {
         "signals": {
-            "duration": [],
-            "accessibility": [],
-            "allowed": "allowed"
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "blind_signals": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "marked": {
-            "duration": [],
-            "accessibility": [],
-            "allowed": "allowed"
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "island": {
-            "duration": [],
-            "accessibility": [],
-            "allowed": "allowed"
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         },
         "unmarked": {
-            "duration": [],
-            "accessibility": [],
-            "allowed": "allowed"
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
         }
     },
     "crossing_rail": {
@@ -212,22 +436,63 @@
     },
     "elevator_cost": {
         "duration": [
-            60
-        ],
-        "accessibility": [],
-        "allowed": "allowed"
-    },
-    "escalator_cost": {
-        "duration": [],
-        "accessibility": [
+            60,
+            0,
             0
         ],
-        "allowed": "allowed"
+        "accessibility": [
+            0,
+            0,
+            0
+        ],
+        "allowed": "allowed",
+        "duration_penalty": 0,
+        "accessibility_penalty": 0
+    },
+    "escalator_cost": {
+        "duration": [
+            0,
+            0,
+            0
+        ],
+        "accessibility": [
+            0,
+            0,
+            0
+        ],
+        "allowed": "allowed",
+        "duration_penalty": 0,
+        "accessibility_penalty": 0
     },
     "moving_walkway_cost": {
-        "duration": [],
-        "accessibility": [],
-        "allowed": "allowed"
+        "duration": [
+            0,
+            0,
+            0
+        ],
+        "accessibility": [
+            0,
+            0,
+            0
+        ],
+        "allowed": "allowed",
+        "duration_penalty": 0,
+        "accessibility_penalty": 0
+    },
+    "cycle_barrier_cost": {
+        "duration": [
+            0,
+            0,
+            0
+        ],
+        "accessibility": [
+            0,
+            0,
+            0
+        ],
+        "allowed": "allowed",
+        "duration_penalty": 0,
+        "accessibility_penalty": 0
     },
     "elevation_up_cost": {
         "duration": [],
@@ -238,8 +503,247 @@
         "allowed": "allowed"
     },
     "elevation_down_cost": {
-        "duration": [],
-        "accessibility": [],
-        "allowed": "allowed"
+        "duration": [
+            0,
+            0,
+            0
+        ],
+        "accessibility": [
+            0,
+            0,
+            0
+        ],
+        "allowed": "allowed",
+        "duration_penalty": 0,
+        "accessibility_penalty": 0
+    },
+    "door": {
+        "yes": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "no": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "hinged": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "sliding": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "revolving": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "folding": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "trapdoor": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "overhead": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        }
+    },
+    "automatic_door": {
+        "yes": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "no": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "button": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "motion": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "floor": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "continuous": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        },
+        "slowdown_button": {
+            "duration": [
+                0,
+                0,
+                0
+            ],
+            "accessibility": [
+                0,
+                0,
+                0
+            ],
+            "allowed": "allowed",
+            "duration_penalty": 0,
+            "accessibility_penalty": 0
+        }
     }
 }
