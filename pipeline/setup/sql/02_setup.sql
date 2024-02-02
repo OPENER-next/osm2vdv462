@@ -70,12 +70,13 @@ CREATE TABLE path_links (
   stop_area_relation_id INT,
   edge EDGE_DESCRIPTION,
   level NUMERIC, -- positive for upwards link, negative for downwards link
-  geom GEOMETRY,
-  -- constraint used to filter potential duplicated path links
-  -- include geom column because in rare cases the start & end node can be identical for different path links
-  -- e.g. when stairs and escelators start and end at the same nodes.
-  CONSTRAINT check_unique_2 UNIQUE (edge, geom)
+  geom GEOMETRY
 );
+-- unique index acts as a constraint to filter potential duplicated path links
+-- include geom column because in rare cases the start & end node can be identical for different path links
+-- e.g. when stairs and escalators start and end at the same nodes.
+-- Also use hash to avoid ProgramLimitExceeded: index row size exceeds btree version 4 maximum 2704 for index
+CREATE UNIQUE INDEX check_unique_2 ON path_links (edge, SHA512(geom));
 
 
 /*
