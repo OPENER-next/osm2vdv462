@@ -1,6 +1,6 @@
 {
     "walking_speed": 1.4,
-    "duration_limit": 3600,
+    "duration_limit": 900,
     "max_crossing_detour_primary": 300,
     "max_crossing_detour_secondary": 200,
     "max_crossing_detour_tertiary": 200,
