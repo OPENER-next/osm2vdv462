@@ -583,41 +583,33 @@ LANGUAGE SQL IMMUTABLE;
  * Create a QuayType element based on the tags: train, subway, tram, coach, bus, monorail and light_rail
  * Note: this function also takes the geography of the object to distinguish between a tramPlatform and tramStop
  * Unused types: "airlineGate" | "busBay" | "boatQuay" | "ferryLanding" | "telecabinePlatform" | "taxiStand" | "setDownPlace" | "vehicleLoadingPlace"
- * If no match is found this will always return NULL
+ * If no match is found this will always return "other" (unless a function parameter was NULL)
  */
 CREATE OR REPLACE FUNCTION ex_QuayType(tags jsonb, geom geography) RETURNS xml AS
 $$
-DECLARE
-  result text;
-BEGIN
-  IF tags->>'train' = 'yes'
-    THEN result := 'railPlatform';
-  ELSEIF tags->>'subway' = 'yes'
-    THEN result := 'metroPlatform';
-  ELSEIF tags->>'tram' = 'yes' THEN
-    IF ST_GeometryType(geom::geometry) = 'ST_Point'
-      THEN result := 'tramStop';
-      ELSE result := 'tramPlatform';
-    END IF;
-  ELSEIF tags->>'coach' = 'yes'
-    THEN result := 'coachStop';
-  ELSEIF tags->>'bus' = 'yes' OR
-         tags->>'highway' = 'bus_stop'
-    THEN result := 'busStop';
-  ELSEIF tags->>'light_rail' = 'yes' OR
-         tags->>'monorail' = 'yes' OR
-         tags->>'funicular' = 'yes'
-    THEN result := 'other';
-  END IF;
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "QuayType", result);
-  END IF;
-
-  RETURN NULL;
-END
+SELECT xmlelement(name "QuayType",
+  (SELECT CASE
+    WHEN tags->>'subway' = 'yes' THEN 'metroPlatform'
+    WHEN tags->>'tram' = 'yes' OR
+          tags->>'railway' = 'tram_stop'
+      THEN (SELECT CASE
+        WHEN ST_GeometryType(geom::geometry) = 'ST_Point'
+          THEN 'tramStop'
+          ELSE 'tramPlatform'
+      END)
+    WHEN tags->>'train' = 'yes' OR
+          tags->>'light_rail' = 'yes' OR
+          tags->>'railway' = 'platform'
+      THEN 'railPlatform'
+    WHEN tags->>'coach' = 'yes' THEN 'coachStop'
+    WHEN tags->>'bus' = 'yes' OR
+          tags->>'highway' IN ('bus_stop', 'platform')
+      THEN 'busStop'
+    ELSE 'other'
+  END)
+);
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
