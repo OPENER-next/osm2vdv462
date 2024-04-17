@@ -13,7 +13,7 @@ helpFunction()
 while getopts "h" opt
 do
    case "$opt" in
-      h ) 
+      h )
         helpFunction
       ;;
       ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
@@ -37,9 +37,9 @@ fi
 echo "Starting Docker Compose project ..."
 
 if [ "$USE_PGADMIN4" = "y" ] || [ "$USE_PGADMIN4" = "Y" ]; then
-  docker-compose --profile pgadmin4 up -d
+  docker compose --profile pgadmin4 up -d
 else
-  docker-compose up -d
+  docker compose up -d
 fi
 
 # Check the exit status of the docker compose command
@@ -63,7 +63,7 @@ fi
 # Export to VDV462 xml file
 if [ "$RUN_EXPORT" = "y" ] || [ "$RUN_EXPORT" = "Y" ] || [ "$RUN_AUTOMATICALLY" = "true" ]; then
   echo "Exporting..."
-  
+
   pipeline/stop_places/run.sh
   if [ $? != 0 ]; then
     echo "Error while exporting stop places. Quitting ..."

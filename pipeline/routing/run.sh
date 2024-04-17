@@ -1,12 +1,12 @@
 # Optionally run the PPR preprocessing
 if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_AUTOMATICALLY" = "true" ]; then
   if [ "$IMPORT_FILE_PATH" != "" ]; then
-    docker-compose up osm2vdv462_ppr_preprocess
+    docker compose up osm2vdv462_ppr_preprocess
 
     exit_status=$(docker inspect --format='{{.State.ExitCode}}' osm2vdv462_ppr_preprocess)
 
     # always remove the preprocessing container, even if it exited succesfully
-    docker-compose rm -f osm2vdv462_ppr_preprocess
+    docker compose rm -f osm2vdv462_ppr_preprocess
 
     if [ ! $exit_status -eq 0 ]; then
       echo "Error: Preprocess exited with status $exit_status."
@@ -15,7 +15,7 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
 
     # restart the PPR backend container to reload the new routing graph file
     echo "Restarting PPR backend container ..."
-    docker-compose up -d --force-recreate osm2vdv462_ppr_backend
+    docker compose up -d --force-recreate osm2vdv462_ppr_backend
 
   else
     echo "Error: Cannot run preprocessing without importing an OSM file."
@@ -23,7 +23,7 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
   fi
 else
   echo "Skipping preprocessing ..."
-  docker-compose up -d osm2vdv462_ppr_backend
+  docker compose up -d osm2vdv462_ppr_backend
 fi
 
 # perform healthcheck on the PPR container and wait until the routing graph is loaded
