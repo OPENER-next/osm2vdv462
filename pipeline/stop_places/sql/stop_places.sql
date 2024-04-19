@@ -1047,25 +1047,29 @@ CREATE OR REPLACE VIEW platforms_split AS (
     ps.osm_type as osm_type,
     ps.osm_id as osm_id,
     -- Get the corresponding IFOPT by using the split IFOPT from the subquery 'ps'
-    ps."split_IFOPT" as "IFOPT",
+   "split_IFOPT" as "IFOPT",
     COALESCE(jsonb_concat(ps.tags, pe.tags), ps.tags) as tags,
     COALESCE(pe.geom, ps.geom) as geom
   FROM (
-    -- split platforms with multiple IFOPTs and expand into multiple rows
-    -- if there is only one IFOPT the original IFOPT is put into 'split_IFOPT'
-    -- 'split_ref' will be NULL if thre is no ref tag
     SELECT
       *,
-      string_to_table(pww."IFOPT", ';') AS "split_IFOPT",
-      string_to_table(pww.tags->>'ref', ';') AS "split_ref"
+      -- "refs" will be NULL if there is no ref tag
+      -- do not cross join string_to_table(pww.tags->>'ref', ';'), because sometimes ref is used for different things (like bus routes serving a stop)
+      -- i.e. it is not guaranteed that we will always have the exact number of refs as IFOPTs
+      -- therefore we only split the rows on the IFOPTs otherwise we can have rows where IFOPT will be NULL
+      string_to_array(pww.tags->>'ref', ';') AS refs
     FROM platforms_with_width AS pww
+    -- split platforms with multiple IFOPTs and expand into multiple rows
+    -- if there is only one IFOPT the original IFOPT is put into 'split_IFOPT'
+    -- additionally the index/ordinality is stored to later access the respective "ref" value
+    CROSS JOIN string_to_table(pww."IFOPT", ';') WITH ORDINALITY AS _("split_IFOPT", index)
   ) ps
   -- Join platform edges if any to the platforms to refine tags and geometry
   LEFT JOIN platforms_edges pe
-  -- Check if the platform edge fully overlaps with the platform border
-  ON ST_Touches(ps.geom, pe.geom) AND
-  -- Only use the platform edges that have the same ref tag as the platform
-  ps."split_ref" = pe.tags->>'ref'
+    -- Check if the platform edge fully overlaps with the platform border
+    ON ST_Touches(ps.geom, pe.geom) AND
+    -- Only use the platform edges that have the same ref tag as the platform
+    refs[ps.index] = pe.tags->>'ref'
 );
 
 
