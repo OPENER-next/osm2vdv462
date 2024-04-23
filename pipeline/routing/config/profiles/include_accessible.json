@@ -495,12 +495,19 @@
         "accessibility_penalty": 0
     },
     "elevation_up_cost": {
-        "duration": [],
+        "duration": [
+            0,
+            0,
+            0
+        ],
         "accessibility": [
             0,
-            1
+            0,
+            0
         ],
-        "allowed": "allowed"
+        "allowed": "allowed",
+        "duration_penalty": 0,
+        "accessibility_penalty": 0
     },
     "elevation_down_cost": {
         "duration": [
