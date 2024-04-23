@@ -21,21 +21,16 @@ SELECT xmlroot(
         ),
         xmlelement(name "frames",
           xmlelement(name "SiteFrame", xmlattributes('SiteFrame_1' AS "id", 'any' AS "version"),
-            xmlelement(name "stopPlaces",
-              ( SELECT xmlagg(xmlelement) FROM xml_stopPlaces )
-            ),
-            -- if element is empty remove it, to validate NeTEx
-            -- https://stackoverflow.com/questions/77374040
-            NULLIF(
-              xmlelement(name "parkings",
-                ( SELECT xmlagg(xmlelement) FROM xml_parkings )
-              )::text,
-              '<parkings/>'::text
+            -- use xmlforest to remove/avoid empty elements to validate NeTEx
+            -- https://stackoverflow.com/questions/36340104/how-can-i-get-rid-of-unwanted-empty-xml-tags
+            xmlforest(
+              ( SELECT xmlagg(xmlelement) FROM xml_stopPlaces ) AS "stopPlaces",
+              ( SELECT xmlagg(xmlelement) FROM xml_parkings ) AS "parkings"
             )
           ),
           xmlelement(name "ResourceFrame", xmlattributes('ResourceFrame_1' AS "id", 'any' AS "version"),
-            xmlelement(name "organisations",
-              ( SELECT xmlagg(xmlelement) FROM xml_organisations )
+            xmlforest(
+              ( SELECT xmlagg(xmlelement) FROM xml_organisations ) AS "organisations"
             )
           )
         )
