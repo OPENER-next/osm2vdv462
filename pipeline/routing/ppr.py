@@ -103,10 +103,10 @@ def insertAccessSpaces(cur, currentEdge, previousEdge, relation_id):
     if edge_type == "elevator" or street_type == "stairs" or street_type == "escalator" or currentEdge["incline"] != None:
         # going into the elevator/stairs/escalator/ramp: use level from the previous edge
         # this might fail if two special cases are directly connected (e.g. escalator to stairs)
-        current_level = previousEdge["level"]
+        current_level = previousEdge["level"] or 0
     else:
         # normal case: use current level
-        current_level = currentEdge["level"]
+        current_level = currentEdge["level"] or 0
 
     # create unique id for the access space, that will be filled into the 'IFOPT' column
     # 'STOP_PLACE'_'OSM_NODE_ID':'LEVEL_IF_EXISTS'
@@ -187,8 +187,8 @@ def createPathNetwork(cur, edges, fromNode, toNode):
     previousIFOPT = fromNode.IFOPT
     previousType = fromNode.type
 
-    fromLevel = firstEdge["level"]
-    toLevel = firstEdge["level"]
+    fromLevel = firstEdge["level"] or 0
+    toLevel = firstEdge["level"] or 0
 
     # create 'pathLink' that will be inserted into the database
     # - a pathLink is a list of two nodes (stop_area_element and/or access_space), that are connected by one or multiple edges
@@ -213,7 +213,7 @@ def createPathNetwork(cur, edges, fromNode, toNode):
             # use extend, because there can be multiple nodes in the edge (polyline)
             pathLink.extend(edge["path"][1:])
             pathLinkEdges.append(edge)
-            toLevel = edge["level"]
+            toLevel = edge["level"] or 0
 
         previousEdge = edge
 
@@ -271,11 +271,13 @@ def main():
         "destination": {
         },
         "include_infos": True,
-        "include_full_path": True,
-        "include_steps": True,
+        "include_full_path": False,
+        "include_steps": False,
         "include_steps_path": False,
         "include_edges": True,
-        "include_statistics": True
+        "include_statistics": False,
+        'allow_match_with_no_level': True,
+        'no_level_penalty': 0
     }
 
     try:
