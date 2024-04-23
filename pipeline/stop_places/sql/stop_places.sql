@@ -1356,12 +1356,12 @@ CREATE OR REPLACE VIEW xml_stopPlaces AS (
     ex_Name(ex.area_tags),
     -- <ShortName>
     ex_ShortName(ex.area_tags),
-    -- <alternativeNames>
-    ex_alternativeNames(ex.area_tags),
     -- <Description>
     ex_Description(ex.area_tags),
     -- <Centroid>
     ex_Centroid(area_geom),
+    -- <alternativeNames>
+    ex_alternativeNames(ex.area_tags),
     -- only one Ref is NeTEx valid
     COALESCE(
       -- <OperatorRef>
