@@ -1,7 +1,7 @@
 # Optionally run the PPR preprocessing
 if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_AUTOMATICALLY" = "true" ]; then
   if [ "$IMPORT_FILE_PATH" != "" ]; then
-    docker compose up osm2vdv462_ppr_preprocess
+    docker compose up --force-recreate osm2vdv462_ppr_preprocess
 
     exit_status=$(docker inspect --format='{{.State.ExitCode}}' osm2vdv462_ppr_preprocess)
 
@@ -23,7 +23,7 @@ if [ "$RUN_PREPROCESSING" = "y" ] || [ "$RUN_PREPROCESSING" = "Y" ] || [ "$RUN_A
   fi
 else
   echo "Skipping preprocessing ..."
-  docker compose up -d osm2vdv462_ppr_backend
+  docker compose up -d --force-recreate osm2vdv462_ppr_backend
 fi
 
 # perform healthcheck on the PPR container and wait until the routing graph is loaded

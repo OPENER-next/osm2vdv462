@@ -37,9 +37,9 @@ fi
 echo "Starting Docker Compose project ..."
 
 if [ "$USE_PGADMIN4" = "y" ] || [ "$USE_PGADMIN4" = "Y" ]; then
-  docker compose --profile pgadmin4 up -d
+  docker compose --profile pgadmin4 up -d --force-recreate
 else
-  docker compose up -d
+  docker compose up -d --force-recreate
 fi
 
 # Check the exit status of the docker compose command
