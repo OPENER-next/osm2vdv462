@@ -80,8 +80,6 @@ CREATE OR REPLACE VIEW xml_parkings AS (
     ex_Name(tags),
     -- <Centroid>
     ex_Centroid(geom),
-    -- <LevelRef>
-    ex_LevelRef(relation_id, level),
     -- <ParkingType>
     ex_ParkingType(tags),
     -- <ParkingLayout>
