@@ -48,14 +48,8 @@ LANGUAGE SQL IMMUTABLE;
  */
 CREATE OR REPLACE FUNCTION ex_TotalCapacity(tags jsonb) RETURNS xml AS
 $$
-SELECT
-  CASE
-    WHEN $1->>'capacity' IS NOT NULL THEN xmlelement(
-      name "TotalCapacity",
-      $1->>'capacity'
-    )
-    ELSE NULL
-  END
+-- use xmlforest to return NULL when tag value is null
+SELECT xmlforest($1->>'capacity' AS "TotalCapacity")
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 

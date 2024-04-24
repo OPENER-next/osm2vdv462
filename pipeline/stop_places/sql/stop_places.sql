@@ -646,10 +646,9 @@ LANGUAGE SQL IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_alternativeNames(tags jsonb) RETURNS xml AS
 $$
-DECLARE
-  result xml;
-BEGIN
-  result := xmlconcat(
+-- use xmlforest to return NULL when xmlconcat returns null
+SELECT xmlforest(
+  xmlconcat(
     create_AlternativeTranslationName('en', tags->>'name:en'),
     create_AlternativeTranslationName('de', tags->>'name:de'),
     create_AlternativeTranslationName('fr', tags->>'name:fr'),
@@ -664,16 +663,11 @@ BEGIN
       )
       FROM string_to_table(tags->>'alt_name', ';')
     )
-  );
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "alternativeNames", result);
-  END IF;
-
-  RETURN NULL;
-END
+  )
+  AS "alternativeNames"
+)
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
@@ -682,10 +676,9 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_Name(tags jsonb, fallback text DEFAULT '') RETURNS xml AS
 $$
-DECLARE
-  result text;
-BEGIN
-  result := COALESCE(
+-- use xmlforest to return NULL when COALESCE returns null
+SELECT xmlforest(
+  COALESCE(
     tags->>'name',
     tags->>'name:de',
     tags->>'official_name',
@@ -696,16 +689,11 @@ BEGIN
     -- with STRICT the DEFAULT fallback value cannot be set to NULL
     -- therefore we set it to an empty string and make it NULL here
     NULLIF(fallback, '')
-  );
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "Name", result);
-  END IF;
-
-  RETURN NULL;
-END
+  )
+  AS "Name"
+)
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
@@ -714,19 +702,16 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_ShortName(tags jsonb) RETURNS xml AS
 $$
-DECLARE
-  result text;
-BEGIN
-  result := COALESCE(tags->>'short_name', tags->>'short_name:de');
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "ShortName", result);
-  END IF;
-
-  RETURN NULL;
-END
+-- use xmlforest to return NULL when tag value is null
+SELECT xmlforest(
+  COALESCE(
+    tags->>'short_name',
+    tags->>'short_name:de'
+  )
+  AS "ShortName"
+)
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
@@ -735,14 +720,11 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_Description(tags jsonb) RETURNS xml AS
 $$
-SELECT
-  CASE
-    WHEN $1->>'description' IS NOT NULL THEN xmlelement(
-      name "Description",
-      $1->>'description'
-    )
-    ELSE NULL
-  END
+-- use xmlforest to return NULL when tag value is null
+SELECT xmlforest(
+  tags->>'description'
+  AS "Description"
+)
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -848,39 +830,34 @@ LANGUAGE SQL IMMUTABLE;
  */
 CREATE OR REPLACE FUNCTION ex_AccessSpaceType(tags jsonb) RETURNS xml AS
 $$
-DECLARE
-  result xml;
-BEGIN
-  IF tags->>'indoor' = 'area' OR
-     tags->>'highway' = 'pedestrian' AND tags->>'area' = 'yes' OR
-     tags->>'place' = 'square' OR
-     tags->>'room' = 'entrance'
-    THEN result := 'concourse';
-  ELSEIF tags->>'bridge' = 'yes'
-    THEN result := 'overpass';
-  ELSEIF tags->>'tunnel' = 'yes'
-    THEN result := 'underpass';
-  ELSEIF tags->>'highway' = 'elevator'
-    THEN result := 'lift';
-  ELSEIF tags->>'indoor' = 'corridor' OR
+-- use xmlforest to return NULL when case returns null
+SELECT xmlforest(
+  CASE
+    WHEN tags->>'indoor' = 'area' OR
+         tags->>'highway' = 'pedestrian' AND tags->>'area' = 'yes' OR
+         tags->>'place' = 'square' OR
+         tags->>'room' = 'entrance'
+         THEN 'concourse'
+    WHEN tags->>'bridge' = 'yes'
+         THEN 'overpass'
+    WHEN tags->>'tunnel' = 'yes'
+         THEN 'underpass'
+    WHEN tags->>'highway' = 'elevator'
+         THEN 'lift'
+    WHEN tags->>'indoor' = 'corridor' OR
          tags->>'highway' IN ('footway', 'pedestrian', 'path', 'corridor') OR
          tags->>'room' = 'corridor'
-    THEN result := 'passage';
-  ELSEIF tags->>'stairs' = 'yes' OR
+         THEN 'passage'
+    WHEN tags->>'stairs' = 'yes' OR
          tags->>'room' = 'stairs'
-    THEN result := 'staircase';
-  ELSEIF tags->>'room' = 'waiting'
-    THEN result := 'waitingRoom';
-  END IF;
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "AccessSpaceType", result);
-  END IF;
-
-  RETURN NULL;
-END
+         THEN 'staircase'
+    WHEN tags->>'room' = 'waiting'
+         THEN 'waitingRoom'
+  END
+  AS "AccessSpaceType"
+)
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
@@ -890,47 +867,39 @@ LANGUAGE plpgsql IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_AccessFeatureType(tags jsonb) RETURNS xml AS
 $$
-DECLARE
-  result xml;
-BEGIN
-    IF tags->>'highway' = 'steps' AND
-      tags->>'conveying' IS NULL
-      THEN result := 'stairs';
-    ELSEIF tags->>'highway' = 'elevator'
-      THEN result := 'lift';
-    ELSEIF tags->>'highway' = 'steps' AND
-          tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible')
-      THEN result := 'escalator';
-    ELSEIF tags->>'highway' IN ('footway', 'path', 'cycleway') AND
-          tags->>'incline' IS NOT NULL
-      THEN result := 'ramp';
-    END IF;
-
-  IF result IS NOT NULL THEN
-    RETURN xmlelement(name "AccessFeatureType", result);
-  END IF;
-
-  RETURN NULL;
-END
+-- use xmlforest to return NULL when case returns null
+SELECT xmlforest(
+  CASE
+    WHEN tags->>'highway' = 'steps' AND
+         tags->>'conveying' IS NULL
+         THEN 'stairs'
+    WHEN tags->>'highway' = 'elevator'
+         THEN 'lift'
+    WHEN tags->>'highway' = 'steps' AND
+         tags->>'conveying' IN ('yes', 'forward', 'backward', 'reversible')
+         THEN 'escalator'
+    WHEN tags->>'highway' IN ('footway', 'path', 'cycleway') AND
+         tags->>'incline' IS NOT NULL
+         THEN 'ramp'
+  END
+  AS "AccessFeatureType"
+)
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
- * Create a NumerOfSteps element based on the tags: highway=steps and step_count.
+ * Create a NumerOfSteps element based on the step_count tag.
  * The input "tags" should be a single JSONB element (no array).
  * Returns null when no tag matching exists
  */
 CREATE OR REPLACE FUNCTION ex_NumberOfSteps(tags jsonb) RETURNS xml AS
 $$
-SELECT
-  CASE
-    WHEN $1->>'highway' = 'steps' AND $1->>'step_count' IS NOT NULL THEN xmlelement(
-      name "NumberOfSteps",
-      $1->>'step_count'
-    )
-    ELSE NULL
-  END
+-- use xmlforest to return NULL when tag value is null
+SELECT xmlforest(
+  $1->>'step_count'
+  AS "NumberOfSteps"
+)
 $$
 LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -942,23 +911,18 @@ LANGUAGE SQL IMMUTABLE STRICT;
  */
 CREATE OR REPLACE FUNCTION ex_TransferDuration(tags jsonb, geo geometry, level NUMERIC) RETURNS xml AS
 $$
-DECLARE
-  duration interval;
-BEGIN
-  duration := parse_duration($1->>'duration');
-  IF duration IS NULL THEN
-    duration := estimate_duration($1, $2, $3, 1.4);
-  END IF;
-  RETURN xmlelement(
-    name "TransferDuration",
-    xmlelement(
-      name "DefaultDuration",
-      duration
+SELECT xmlelement(
+  name "TransferDuration",
+  xmlelement(
+    name "DefaultDuration",
+    COALESCE(
+      parse_duration($1->>'duration'),
+      estimate_duration($1, $2, $3, 1.4)
     )
-  );
-END;
+  )
+)
 $$
-LANGUAGE plpgsql IMMUTABLE STRICT;
+LANGUAGE SQL IMMUTABLE STRICT;
 
 
 /*
