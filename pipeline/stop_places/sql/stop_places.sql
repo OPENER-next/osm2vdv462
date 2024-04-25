@@ -1181,32 +1181,44 @@ CREATE OR REPLACE VIEW final_site_path_links AS (
 CREATE OR REPLACE VIEW stop_places_with_organisations AS (
   SELECT stop_areas.*, op.id AS operator_id, net.id AS network_id
   FROM stop_areas
-  LEFT JOIN organisations op
-  ON
-    op.id = ANY(string_to_array(tags->>'operator:wikidata', ';')) OR
-    -- ensure that if an wikidata id is present it will not be matched by name
-    tags->>'operator:wikidata' IS NULL AND (
-      (
-        string_to_array(tags->>'operator', ';') ||
-        string_to_array(tags->>'operator:short', ';')
-      ) && ( -- checks if the arrays have at least one element in common
-        ARRAY[ op.label, op.official_name, op.short_name ] ||
-        string_to_array(op.alternatives, ', ')
-      )
-    )
-  LEFT JOIN organisations net
-  ON
-    net.id = ANY(string_to_array(tags->>'network:wikidata', ';')) OR
-    -- ensure that if an wikidata id is present it will not be matched by name
-    tags->>'network:wikidata' IS NULL AND (
-      (
-        string_to_array(tags->>'network', ';') ||
-        string_to_array(tags->>'network:short', ';')
-      ) && ( -- checks if the arrays have at least one element in common
-        ARRAY[ net.label, net.official_name, net.short_name ] ||
-        string_to_array(net.alternatives, ', ')
-      )
-    )
+  LEFT JOIN LATERAL (
+    SELECT *
+    FROM organisations AS org
+    WHERE org.id = ANY(string_to_array(tags->>'operator:wikidata', ';')) OR
+          -- ensure that if an wikidata id is present it will not be matched by name
+          tags->>'operator:wikidata' IS NULL AND (
+            (
+              string_to_array(tags->>'operator', ';') ||
+              string_to_array(tags->>'operator:short', ';')
+            ) && ( -- checks if the arrays have at least one element in common
+              ARRAY[ org.label, org.official_name, org.short_name ] ||
+              string_to_array(org.alternatives, ', ')
+            )
+          )
+    -- LATERAL with LIMIT 1 ensures that only ever one organisation will be matched
+    -- due to name matching multiple may match, so this ultimately avoids duplicate rows
+    ORDER BY org.id
+    LIMIT 1
+  ) AS op ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT *
+    FROM organisations AS org
+    WHERE org.id = ANY(string_to_array(tags->>'network:wikidata', ';')) OR
+          -- ensure that if an wikidata id is present it will not be matched by name
+          tags->>'network:wikidata' IS NULL AND (
+            (
+              string_to_array(tags->>'network', ';') ||
+              string_to_array(tags->>'network:short', ';')
+            ) && ( -- checks if the arrays have at least one element in common
+              ARRAY[ org.label, org.official_name, org.short_name ] ||
+              string_to_array(org.alternatives, ', ')
+            )
+          )
+    -- LATERAL with LIMIT 1 ensures that only ever one organisation will be matched
+    -- due to name matching multiple may match, so this ultimately avoids duplicate rows
+    ORDER BY org.id
+    LIMIT 1
+  ) AS net ON TRUE
 );
 
 
