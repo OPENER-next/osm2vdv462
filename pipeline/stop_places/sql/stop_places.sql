@@ -380,8 +380,8 @@ SELECT create_keyList(xmlconcat(
         -- 2092: footprint area of the lift
         create_KeyValue(
           '2092',
-          -- if one value is null this will evaluate to null
-          parse_length(tags->>'length') * parse_length(tags->>'width') / 100
+          -- if one value is null this will evaluates to null
+          trim_scale(parse_length(tags->>'length') * parse_length(tags->>'width') / 10000)
         ),
         -- 2093: footprint length of the lift
         create_KeyValue('2093',  parse_length(tags->>'length')),
