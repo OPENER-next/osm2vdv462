@@ -40,7 +40,9 @@ jobs:
           repository: NeTEx-CEN/NeTEx
 
       - name: Install xmllint
-        run: sudo apt-get install libxml2-utils
+        run: |
+          sudo apt-get update
+          sudo apt-get install libxml2-utils
 
       - name: Download example export
         uses: actions/download-artifact@v5
