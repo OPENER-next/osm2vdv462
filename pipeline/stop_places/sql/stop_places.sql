@@ -336,9 +336,9 @@ SELECT create_keyList(xmlconcat(
   END),
   -- 1210: portable ramp exists
   delfi_attribute_check_values_xml('1210', tags->>'ramp:portable'),
-  -- 1210: portable ramp total length
+  -- 1211: portable ramp total length
   create_KeyValue('1211', parse_length(tags->>'ramp:length')),
-  -- 1210: portable ramp weight limit
+  -- 1212: portable ramp weight limit
   create_KeyValue('1212', parse_weight(tags->>'ramp:maxweight')),
   -- 1220: portable platform lift exists
   delfi_attribute_check_values_xml('1220', tags->>'platform_lift'),
@@ -479,15 +479,15 @@ SELECT create_keyList(xmlconcat(
     WHEN tags->>'barrier' = 'cycle_barrier' AND tags->>'cycle_barrier' IN ('single', 'tilted', 'diagonal') THEN
       -- 2080: bicycle barrier opening width
       xmlconcat(
-        create_KeyValue('2080 ', parse_length(tags->>'maxwidth:physical'))
+        create_KeyValue('2080', parse_length(tags->>'maxwidth:physical'))
       )
-    -- cycle barrier single
+    -- cycle barrier double/triple
     WHEN tags->>'barrier' = 'cycle_barrier' AND tags->>'cycle_barrier' IN ('double', 'triple') THEN
       -- 2080: bicycle barrier opening width
       -- 2081: bicycle barrier spacing width
       xmlconcat(
-        create_KeyValue('2080 ', parse_length(tags->>'opening')),
-        create_KeyValue('2081 ', parse_length(tags->>'spacing'))
+        create_KeyValue('2080', parse_length(tags->>'opening')),
+        create_KeyValue('2081', parse_length(tags->>'spacing'))
       )
     -- doors
     WHEN tags->>'indoor' = 'door' AND tags->>'door' <> 'no' THEN
