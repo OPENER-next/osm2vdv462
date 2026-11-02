@@ -15,6 +15,7 @@ volumes:
 services:
   osm2vdv462_postgis:
     image: postgis/postgis:16-master
+    platform: linux/amd64
     container_name: osm2vdv462_postgis
     restart: unless-stopped
     networks:
@@ -41,6 +42,7 @@ services:
 
   osm2vdv462_ppr_preprocess:
     image: ghcr.io/motis-project/ppr:pr-71
+    platform: linux/amd64
     volumes:
       - "ppr:/data"
       # a placeholder path must be set when "IMPORT_FILE_PATH" is empty, otherwise there will be an error decoding the compose project
@@ -55,6 +57,7 @@ services:
 
   osm2vdv462_ppr_backend:
     image: ghcr.io/motis-project/ppr:pr-71
+    platform: linux/amd64
     ports:
       - "9042:8000"
     volumes:
